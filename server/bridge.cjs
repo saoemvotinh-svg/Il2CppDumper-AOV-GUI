@@ -239,6 +239,7 @@ function createBridgeApp() {
       isRunning = false;
       currentProcess = null;
       if (code === 0) {
+        copyScriptsToOutput(outputDir);
         broadcastLog(`✨ Il2CppDumper execution completed successfully (Exit code: 0)`, 'success');
       } else {
         broadcastLog(`❌ Il2CppDumper process exited with code ${code}`, 'error');
@@ -266,6 +267,42 @@ function createBridgeApp() {
     res.json({ message: 'No active process' });
   });
 
+  function copyScriptsToOutput(targetDir) {
+    if (!fs.existsSync(targetDir)) return;
+    const scriptFiles = [
+      'ida_with_struct_py3.py',
+      'ida_py3.py',
+      'ida.py',
+      'ida_with_struct.py',
+      'ghidra.py',
+      'ghidra_with_struct.py',
+      'ghidra_wasm.py'
+    ];
+    const candidates = [
+      path.dirname(resolveEngineExe()),
+      path.join(__dirname, '../engine/Il2CppDumper'),
+      path.join(__dirname, '../../engine/Il2CppDumper'),
+      process.resourcesPath ? path.join(process.resourcesPath, 'engine') : null,
+      path.join(getAppBaseDir(), 'resources', 'engine'),
+      path.join(getAppBaseDir(), 'engine'),
+      path.join(process.cwd(), 'engine', 'Il2CppDumper')
+    ].filter(Boolean);
+
+    for (const s of scriptFiles) {
+      const dest = path.join(targetDir, s);
+      for (const c of candidates) {
+        const src = path.join(c, s);
+        if (fs.existsSync(src)) {
+          try {
+            // Copy or update script file
+            fs.copyFileSync(src, dest);
+            break;
+          } catch {}
+        }
+      }
+    }
+  }
+
   // Artifacts Explorer
   app.get('/api/artifacts', (req, res) => {
     const ws = resolveWorkspaceDefaults();
@@ -275,6 +312,7 @@ function createBridgeApp() {
     }
 
     try {
+      copyScriptsToOutput(targetDir);
       const entries = fs.readdirSync(targetDir, { withFileTypes: true });
       const artifacts = [];
       let dummyDlls = [];

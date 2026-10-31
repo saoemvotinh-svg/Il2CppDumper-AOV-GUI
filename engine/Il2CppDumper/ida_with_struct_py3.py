@@ -28,13 +28,27 @@ def make_function(start, end):
 		ida_funcs.del_func(start)
 	ida_funcs.add_func(start, end)
 
-path = idaapi.ask_file(False, '*.json', 'script.json from Il2cppdumper')
-hpath = idaapi.ask_file(False, '*.h', 'il2cpp.h from Il2cppdumper')
-parse_decls(open(hpath, 'r').read(), 0)
+import os
+
+script_dir = os.path.dirname(os.path.abspath(__file__)) if '__file__' in globals() else ''
+path = os.path.join(script_dir, 'script.json') if script_dir else None
+hpath = os.path.join(script_dir, 'il2cpp.h') if script_dir else None
+
+if not path or not os.path.exists(path):
+	path = idaapi.ask_file(False, '*.json', 'script.json from Il2cppdumper')
+if not hpath or not os.path.exists(hpath):
+	hpath = idaapi.ask_file(False, '*.h', 'il2cpp.h from Il2cppdumper')
+
+if hpath and os.path.exists(hpath):
+	print(f"[Il2CppDumper] Parsing structs from: {hpath}")
+	parse_decls(open(hpath, 'r', encoding='utf-8', errors='ignore').read(), 0)
+
+print(f"[Il2CppDumper] Loading symbol data from: {path}")
 data = json.loads(open(path, 'rb').read().decode('utf-8'))
 
 if "Addresses" in data and "Addresses" in processFields:
 	addresses = data["Addresses"]
+	print(f"[Il2CppDumper] Processing {len(addresses)} addresses...")
 	for index in range(len(addresses) - 1):
 		start = get_addr(addresses[index])
 		end = get_addr(addresses[index + 1])
@@ -42,13 +56,19 @@ if "Addresses" in data and "Addresses" in processFields:
 
 if "ScriptMethod" in data and "ScriptMethod" in processFields:
 	scriptMethods = data["ScriptMethod"]
+	print(f"[Il2CppDumper] Renaming and typing {len(scriptMethods)} methods into IDA...")
+	count = 0
 	for scriptMethod in scriptMethods:
 		addr = get_addr(scriptMethod["Address"])
 		name = scriptMethod["Name"]
 		set_name(addr, name)
 		signature = scriptMethod["Signature"]
 		if apply_type(addr, parse_decl(signature, 0), 1) == False:
-			print("apply_type failed:", hex(addr), signature)
+			pass
+		count += 1
+		if count % 10000 == 0:
+			print(f"[Il2CppDumper] Renamed {count} / {len(scriptMethods)} methods...")
+	print(f"[Il2CppDumper] Done mapping {count} methods!")
 
 if "ScriptString" in data and "ScriptString" in processFields:
 	index = 1

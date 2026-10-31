@@ -293,6 +293,36 @@ namespace Il2CppDumper
                     Console.WriteLine($"ERROR in GenerateDummyDll: {ex.Message}\n{ex.StackTrace}");
                 }
             }
+
+            // Copy IDA & Ghidra mapping scripts directly into output directory
+            try
+            {
+                var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                string[] scriptFiles = new[]
+                {
+                    "ida.py",
+                    "ida_py3.py",
+                    "ida_with_struct.py",
+                    "ida_with_struct_py3.py",
+                    "ghidra.py",
+                    "ghidra_wasm.py",
+                    "ghidra_with_struct.py"
+                };
+                foreach (var scriptFile in scriptFiles)
+                {
+                    var src = Path.Combine(baseDir, scriptFile);
+                    if (File.Exists(src))
+                    {
+                        var dest = Path.Combine(outputDir, scriptFile);
+                        File.Copy(src, dest, true);
+                    }
+                }
+                Console.WriteLine("Done copying IDA/Ghidra scripts to output directory!");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Notice: could not copy scripts: {ex.Message}");
+            }
         }
     }
 }

@@ -63,6 +63,14 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": "engine/Il2CppDumper",
+        "to": "engine",
+        "filter": [
+          "*.py",
+          "config.json"
+        ]
       }
     ],
     "extraFiles": [
