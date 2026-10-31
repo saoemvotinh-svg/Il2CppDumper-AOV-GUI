@@ -24,6 +24,19 @@ body {
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* Universal text selectability */
+p, span, div, pre, code, td, th, li, h1, h2, h3, h4, h5, h6, input {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+button, svg, [role="button"] {
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 /* Industrial Precision Scrollbars */

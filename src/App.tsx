@@ -170,7 +170,7 @@ export function App() {
   };
 
   return (
-    <div className="min-h-screen bg-app-bg text-ink-primary flex flex-col font-sans select-none">
+    <div className="min-h-screen bg-app-bg text-ink-primary flex flex-col font-sans select-text">
       <Header
         activeTab={activeTab}
         setActiveTab={setActiveTab}

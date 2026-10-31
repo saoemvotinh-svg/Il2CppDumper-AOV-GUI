@@ -107,7 +107,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       {/* Terminal Viewport */}
       <div
         ref={terminalContainerRef}
-        className="flex-1 p-3.5 font-mono text-xs overflow-y-auto space-y-0.5 bg-app-bg"
+        className="flex-1 p-3.5 font-mono text-xs overflow-y-auto space-y-0.5 bg-app-bg select-text"
       >
         {logs.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-ink-muted space-y-1">
@@ -115,11 +115,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           </div>
         ) : (
           logs.map((entry, idx) => (
-            <div key={idx} className={`leading-5 break-all flex items-start gap-2 ${getLineStyle(entry.level)}`}>
+            <div key={idx} className={`leading-5 break-all flex items-start gap-2 select-text ${getLineStyle(entry.level)}`}>
               <span className="text-ink-muted text-[11px] select-none shrink-0 font-mono">
                 {entry.timestamp}
               </span>
-              <span className="flex-1">{entry.line}</span>
+              <span className="flex-1 select-text">{entry.line}</span>
             </div>
           ))
         )}

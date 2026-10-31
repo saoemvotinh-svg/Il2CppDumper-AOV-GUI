@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Binary, FileCode, Folder, Database, FolderOpen, Loader2 } from 'lucide-react';
+import { Binary, FileCode, Folder, Database, FolderOpen, Loader2, Copy, Check } from 'lucide-react';
 import { apiUrl } from '../config';
 
 interface BinaryDropzoneProps {
@@ -28,6 +28,14 @@ export const BinaryDropzone: React.FC<BinaryDropzoneProps> = ({
   const [browsingTarget, setBrowsingTarget] = useState<'elf' | 'meta' | 'out' | null>(null);
   const [dragOverElf, setDragOverElf] = useState(false);
   const [dragOverMeta, setDragOverMeta] = useState(false);
+  const [copiedTarget, setCopiedTarget] = useState<string | null>(null);
+
+  const copyPath = (text: string, targetId: string) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedTarget(targetId);
+    setTimeout(() => setCopiedTarget(null), 2000);
+  };
 
   const handleBrowseFile = async (target: 'elf' | 'meta') => {
     setBrowsingTarget(target);
@@ -177,6 +185,14 @@ export const BinaryDropzone: React.FC<BinaryDropzoneProps> = ({
               />
               <button
                 type="button"
+                onClick={() => copyPath(elfPath, 'elf')}
+                className="btn-secondary-action p-1.5 text-xs shrink-0 cursor-pointer"
+                title="Copy binary path"
+              >
+                {copiedTarget === 'elf' ? <Check className="w-3.5 h-3.5 text-status-ready" /> : <Copy className="w-3.5 h-3.5 text-ink-secondary" />}
+              </button>
+              <button
+                type="button"
                 onClick={() => handleBrowseFile('elf')}
                 disabled={browsingTarget === 'elf'}
                 className="btn-secondary-action px-2.5 py-1.5 text-xs font-medium flex items-center gap-1.5 shrink-0 cursor-pointer disabled:opacity-50"
@@ -233,6 +249,14 @@ export const BinaryDropzone: React.FC<BinaryDropzoneProps> = ({
               />
               <button
                 type="button"
+                onClick={() => copyPath(metadataPath, 'meta')}
+                className="btn-secondary-action p-1.5 text-xs shrink-0 cursor-pointer"
+                title="Copy metadata path"
+              >
+                {copiedTarget === 'meta' ? <Check className="w-3.5 h-3.5 text-status-ready" /> : <Copy className="w-3.5 h-3.5 text-ink-secondary" />}
+              </button>
+              <button
+                type="button"
                 onClick={() => handleBrowseFile('meta')}
                 disabled={browsingTarget === 'meta'}
                 className="btn-secondary-action px-2.5 py-1.5 text-xs font-medium flex items-center gap-1.5 shrink-0 cursor-pointer disabled:opacity-50"
@@ -263,6 +287,14 @@ export const BinaryDropzone: React.FC<BinaryDropzoneProps> = ({
               placeholder="Destination directory path"
               className="control-input flex-1 px-2.5 py-1.5 text-xs font-mono"
             />
+            <button
+              type="button"
+              onClick={() => copyPath(outputDir, 'out')}
+              className="btn-secondary-action p-1.5 text-xs shrink-0 cursor-pointer"
+              title="Copy output directory path"
+            >
+              {copiedTarget === 'out' ? <Check className="w-3.5 h-3.5 text-status-ready" /> : <Copy className="w-3.5 h-3.5 text-ink-secondary" />}
+            </button>
             <button
               type="button"
               onClick={handleBrowseFolder}

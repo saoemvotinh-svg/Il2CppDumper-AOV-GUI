@@ -303,10 +303,17 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
                         {item.symbolType}
                       </span>
 
-                      {/* Symbol Name */}
-                      <span className="text-xs font-mono font-semibold text-ink-primary">
+                      {/* Symbol Name & Copy */}
+                      <span className="text-xs font-mono font-semibold text-ink-primary select-text">
                         {item.name}
                       </span>
+                      <button
+                        onClick={() => copyToClipboard(item.name)}
+                        className="p-1 rounded text-ink-muted hover:text-ink-primary cursor-pointer transition-colors"
+                        title="Copy symbol name"
+                      >
+                        {copiedText === item.name ? <Check className="w-3 h-3 text-status-ready" /> : <Copy className="w-3 h-3" />}
+                      </button>
 
                       {/* DLL Badge */}
                       <button
@@ -315,32 +322,50 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
                         title="Open this Assembly in Inspector"
                       >
                         <Box className="w-3 h-3 text-accent" />
-                        <span>{item.dll}</span>
+                        <span className="select-text">{item.dll}</span>
                       </button>
 
                       {/* Enclosing Class Badge */}
-                      <button
-                        onClick={() => handleInspectClass(item.typeDefIndex, item.enclosingClass)}
-                        className="text-[11px] font-mono text-ink-secondary bg-app-elevated px-2 py-0.5 rounded border border-app-border hover:border-accent hover:text-accent cursor-pointer transition-colors"
-                        title="Inspect enclosing class"
-                      >
-                        Class: <span className="font-semibold text-ink-primary">{item.enclosingClass}</span>
-                      </button>
+                      <div className="flex items-center bg-app-elevated rounded border border-app-border overflow-hidden">
+                        <button
+                          onClick={() => handleInspectClass(item.typeDefIndex, item.enclosingClass)}
+                          className="text-[11px] font-mono text-ink-secondary px-2 py-0.5 hover:text-accent cursor-pointer transition-colors"
+                          title="Inspect enclosing class"
+                        >
+                          Class: <span className="font-semibold text-ink-primary select-text">{item.enclosingClass}</span>
+                        </button>
+                        <button
+                          onClick={() => copyToClipboard(item.enclosingClass)}
+                          className="p-1 text-ink-muted hover:text-ink-primary cursor-pointer border-l border-app-border/40"
+                          title="Copy class name"
+                        >
+                          {copiedText === item.enclosingClass ? <Check className="w-2.5 h-2.5 text-status-ready" /> : <Copy className="w-2.5 h-2.5" />}
+                        </button>
+                      </div>
 
                       {/* Parent Class (Class cha) */}
                       {item.baseClass && (
-                        <button
-                          onClick={() => handleInspectClass(undefined, item.baseClass!)}
-                          className="text-[11px] font-mono text-ink-muted bg-app-bg px-2 py-0.5 rounded border border-app-border hover:text-ink-primary cursor-pointer transition-colors"
-                          title="Jump to Base Class (Class cha)"
-                        >
-                          Base: <span className="text-ink-secondary">{item.baseClass}</span>
-                        </button>
+                        <div className="flex items-center bg-app-bg rounded border border-app-border overflow-hidden">
+                          <button
+                            onClick={() => handleInspectClass(undefined, item.baseClass!)}
+                            className="text-[11px] font-mono text-ink-muted px-2 py-0.5 hover:text-ink-primary cursor-pointer transition-colors"
+                            title="Jump to Base Class (Class cha)"
+                          >
+                            Base: <span className="text-ink-secondary select-text">{item.baseClass}</span>
+                          </button>
+                          <button
+                            onClick={() => copyToClipboard(item.baseClass!)}
+                            className="p-1 text-ink-muted hover:text-ink-primary cursor-pointer border-l border-app-border/40"
+                            title="Copy base class name"
+                          >
+                            {copiedText === item.baseClass ? <Check className="w-2.5 h-2.5 text-status-ready" /> : <Copy className="w-2.5 h-2.5" />}
+                          </button>
+                        </div>
                       )}
 
                       {/* Derived Classes (Class con) */}
                       {item.childCount > 0 && (
-                        <span className="text-[10px] font-mono text-status-ready bg-status-ready/10 px-1.5 py-0.5 rounded border border-status-ready/30">
+                        <span className="text-[10px] font-mono text-status-ready bg-status-ready/10 px-1.5 py-0.5 rounded border border-status-ready/30 select-text">
                           Subclasses: {item.childCount}
                         </span>
                       )}
@@ -355,7 +380,7 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
                           title="Copy RVA address"
                         >
                           {copiedText === item.rva ? <Check className="w-3 h-3 text-status-ready" /> : <Copy className="w-3 h-3" />}
-                          <span>{item.rva}</span>
+                          <span className="select-text">{item.rva}</span>
                         </button>
                       )}
 
@@ -379,9 +404,28 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
                     </div>
                   </div>
 
-                  {/* Signature Code Box */}
-                  <div className="font-mono text-xs text-ink-primary bg-app-bg px-3 py-1.5 rounded border border-app-border/60 overflow-x-auto whitespace-pre">
-                    {item.signature}
+                  {/* Signature Code Box with One-Click Copy */}
+                  <div className="relative group">
+                    <div className="font-mono text-xs text-ink-primary bg-app-bg px-3 py-2 pr-16 rounded border border-app-border/60 overflow-x-auto whitespace-pre select-text">
+                      {item.signature}
+                    </div>
+                    <button
+                      onClick={() => copyToClipboard(item.signature)}
+                      className="absolute right-2 top-2 px-2 py-0.5 rounded text-[10px] font-mono bg-app-elevated hover:bg-app-elevatedHover border border-app-border text-ink-secondary hover:text-ink-primary cursor-pointer transition-colors flex items-center gap-1 shadow-sm"
+                      title="Copy full signature"
+                    >
+                      {copiedText === item.signature ? (
+                        <>
+                          <Check className="w-3 h-3 text-status-ready" />
+                          <span className="text-status-ready">Copied</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3 h-3" />
+                          <span>Copy</span>
+                        </>
+                      )}
+                    </button>
                   </div>
 
                   {/* Detailed Parameters / Offset row */}
@@ -393,21 +437,37 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
                           {item.paramCount === 0 ? (
                             <span className="text-ink-muted">void (none)</span>
                           ) : (
-                            <span className="text-ink-primary">
+                            <span className="text-ink-primary select-text">
                               {item.parameters.map((p) => `${p.type} ${p.name}`).join(', ')}
                             </span>
+                          )}
+                          {item.paramCount > 0 && (
+                            <button
+                              onClick={() => copyToClipboard(item.parameters.map((p) => `${p.type} ${p.name}`).join(', '))}
+                              className="p-0.5 text-ink-muted hover:text-ink-primary cursor-pointer"
+                              title="Copy parameters string"
+                            >
+                              <Copy className="w-2.5 h-2.5" />
+                            </button>
                           )}
                         </div>
                         {item.returnType && (
                           <div className="flex items-center gap-1">
                             <span className="text-ink-muted">Return:</span>
-                            <span className="text-ink-primary">{item.returnType}</span>
+                            <span className="text-ink-primary select-text">{item.returnType}</span>
                           </div>
                         )}
                         {item.offset && (
                           <div className="flex items-center gap-1">
                             <span className="text-ink-muted">File Offset:</span>
-                            <span className="text-accent">{item.offset}</span>
+                            <button
+                              onClick={() => copyToClipboard(item.offset!)}
+                              className="text-accent hover:underline flex items-center gap-0.5 cursor-pointer font-semibold"
+                              title="Click to copy file offset"
+                            >
+                              <span className="select-text">{item.offset}</span>
+                              <Copy className="w-2.5 h-2.5 opacity-70" />
+                            </button>
                           </div>
                         )}
                       </>
@@ -415,17 +475,31 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
                       <>
                         <div className="flex items-center gap-1">
                           <span className="text-ink-muted">Field Type:</span>
-                          <span className="text-ink-primary">{item.fieldType || item.returnType}</span>
+                          <span className="text-ink-primary select-text">{item.fieldType || item.returnType}</span>
+                          <button
+                            onClick={() => copyToClipboard(item.fieldType || item.returnType || '')}
+                            className="p-0.5 text-ink-muted hover:text-ink-primary cursor-pointer"
+                            title="Copy field type"
+                          >
+                            <Copy className="w-2.5 h-2.5" />
+                          </button>
                         </div>
                         {(item.fieldOffset || item.offset) && (
                           <div className="flex items-center gap-1">
                             <span className="text-ink-muted">Memory Offset:</span>
-                            <span className="text-accent font-semibold">{item.fieldOffset || item.offset}</span>
+                            <button
+                              onClick={() => copyToClipboard(item.fieldOffset || item.offset!)}
+                              className="text-accent hover:underline flex items-center gap-0.5 cursor-pointer font-semibold"
+                              title="Click to copy memory offset"
+                            >
+                              <span className="select-text">{item.fieldOffset || item.offset}</span>
+                              <Copy className="w-2.5 h-2.5 opacity-70" />
+                            </button>
                           </div>
                         )}
                         <div className="flex items-center gap-1">
                           <span className="text-ink-muted">Access:</span>
-                          <span className="text-ink-primary">{item.access}</span>
+                          <span className="text-ink-primary select-text">{item.access}</span>
                         </div>
                       </>
                     ) : (
@@ -756,23 +830,50 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
                             .map((method, i) => (
                               <div
                                 key={i}
-                                className="p-2 rounded border border-app-border bg-app-elevated/40 hover:bg-app-elevated flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2"
+                                className="p-2.5 rounded border border-app-border bg-app-elevated/40 hover:bg-app-elevated flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2"
                               >
-                                <div className="space-y-0.5 flex-1 min-w-0">
+                                <div className="space-y-1 flex-1 min-w-0">
                                   <div className="flex flex-wrap items-center gap-1.5">
                                     <span className="text-[10px] text-ink-muted uppercase">{method.access}</span>
                                     {method.modifier && (
                                       <span className="text-[10px] text-accent uppercase">{method.modifier}</span>
                                     )}
-                                    <span className="text-status-ready font-medium">{method.returnType}</span>
-                                    <span className="font-semibold text-ink-primary">{method.name}</span>
-                                    <span className="text-ink-secondary">
+                                    <span className="text-status-ready font-medium select-text">{method.returnType}</span>
+                                    <span className="font-semibold text-ink-primary select-text">{method.name}</span>
+                                    <button
+                                      onClick={() => copyToClipboard(method.name)}
+                                      className="p-0.5 text-ink-muted hover:text-ink-primary cursor-pointer"
+                                      title="Copy method name"
+                                    >
+                                      <Copy className="w-2.5 h-2.5" />
+                                    </button>
+                                    <span className="text-ink-secondary select-text">
                                       ({method.parameters.map((p) => `${p.type} ${p.name}`).join(', ')})
                                     </span>
                                   </div>
-                                  <div className="text-[11px] text-ink-muted flex items-center gap-2">
-                                    <span>Total parameters: {method.paramCount}</span>
+                                  <div className="text-[11px] text-ink-muted flex items-center gap-3">
+                                    <div className="flex items-center gap-1">
+                                      <span>Parameters ({method.paramCount}):</span>
+                                      {method.paramCount > 0 && (
+                                        <button
+                                          onClick={() => copyToClipboard(method.parameters.map((p) => `${p.type} ${p.name}`).join(', '))}
+                                          className="text-ink-secondary hover:text-ink-primary flex items-center gap-0.5 cursor-pointer"
+                                          title="Copy parameters list"
+                                        >
+                                          <span>copy</span>
+                                          <Copy className="w-2.5 h-2.5" />
+                                        </button>
+                                      )}
+                                    </div>
                                     {method.slot && <span>Slot: {method.slot}</span>}
+                                    <button
+                                      onClick={() => copyToClipboard(method.raw)}
+                                      className="text-ink-secondary hover:text-accent flex items-center gap-1 cursor-pointer"
+                                      title="Copy full method signature"
+                                    >
+                                      <span>Copy Signature</span>
+                                      <Copy className="w-2.5 h-2.5" />
+                                    </button>
                                   </div>
                                 </div>
 
@@ -788,13 +889,22 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
                                       ) : (
                                         <Copy className="w-3 h-3" />
                                       )}
-                                      <span>RVA: {method.rva}</span>
+                                      <span className="select-text">RVA: {method.rva}</span>
                                     </button>
                                   )}
                                   {method.offset && (
-                                    <span className="text-[11px] text-ink-muted">
-                                      Offset: {method.offset}
-                                    </span>
+                                    <button
+                                      onClick={() => copyToClipboard(method.offset!)}
+                                      className="px-2 py-0.5 rounded text-[11px] bg-app-bg hover:bg-app-elevatedHover border border-app-border text-ink-secondary hover:text-accent cursor-pointer flex items-center gap-1"
+                                      title="Copy File Offset"
+                                    >
+                                      {copiedText === method.offset ? (
+                                        <Check className="w-3 h-3 text-status-ready" />
+                                      ) : (
+                                        <Copy className="w-3 h-3" />
+                                      )}
+                                      <span className="select-text">Offset: {method.offset}</span>
+                                    </button>
                                   )}
                                 </div>
                               </div>
@@ -813,12 +923,26 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
                             .map((field, i) => (
                               <div
                                 key={i}
-                                className="p-2 rounded border border-app-border bg-app-elevated/40 hover:bg-app-elevated flex items-center justify-between gap-2"
+                                className="p-2.5 rounded border border-app-border bg-app-elevated/40 hover:bg-app-elevated flex items-center justify-between gap-2"
                               >
                                 <div className="flex items-center gap-2">
                                   <span className="text-[10px] text-ink-muted uppercase">{field.access}</span>
-                                  <span className="text-status-ready font-medium">{field.type}</span>
-                                  <span className="font-semibold text-ink-primary">{field.name}</span>
+                                  <span className="text-status-ready font-medium select-text">{field.type}</span>
+                                  <span className="font-semibold text-ink-primary select-text">{field.name}</span>
+                                  <button
+                                    onClick={() => copyToClipboard(field.name)}
+                                    className="p-0.5 text-ink-muted hover:text-ink-primary cursor-pointer"
+                                    title="Copy field name"
+                                  >
+                                    <Copy className="w-2.5 h-2.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => copyToClipboard(field.raw)}
+                                    className="p-0.5 text-ink-muted hover:text-ink-primary cursor-pointer text-[10px]"
+                                    title="Copy full field definition"
+                                  >
+                                    [Copy Line]
+                                  </button>
                                 </div>
 
                                 <div className="flex items-center gap-2">
@@ -833,7 +957,7 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
                                       ) : (
                                         <Copy className="w-3 h-3" />
                                       )}
-                                      <span>{field.offset}</span>
+                                      <span className="select-text">{field.offset}</span>
                                     </button>
                                   )}
                                 </div>
@@ -844,8 +968,8 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
 
                       {/* DECOMPILED CODE TAB */}
                       {activeClassTab === 'code' && (
-                        <div className="rounded border border-app-border bg-app-bg p-3 overflow-x-auto font-mono text-xs leading-relaxed text-ink-primary">
-                          <pre>{selectedClass.sourceCode}</pre>
+                        <div className="rounded border border-app-border bg-app-bg p-3 overflow-x-auto font-mono text-xs leading-relaxed text-ink-primary select-text">
+                          <pre className="select-text whitespace-pre">{selectedClass.sourceCode}</pre>
                         </div>
                       )}
                     </div>
