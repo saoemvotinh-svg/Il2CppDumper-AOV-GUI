@@ -1,9 +1,9 @@
 import React from 'react';
-import { Cpu, Terminal, Layers } from 'lucide-react';
+import { Cpu, Terminal, Layers, Wrench } from 'lucide-react';
 
 interface HeaderProps {
-  activeTab: 'dump' | 'artifacts';
-  setActiveTab: (tab: 'dump' | 'artifacts') => void;
+  activeTab: 'dump' | 'artifacts' | 'fix-metadata';
+  setActiveTab: (tab: 'dump' | 'artifacts' | 'fix-metadata') => void;
   isRunning: boolean;
   totalDlls?: number;
 }
@@ -70,6 +70,21 @@ export const Header: React.FC<HeaderProps> = ({
             <span>Artifact Explorer</span>
             <span className="px-1.5 py-0.2 rounded bg-app-workspace border border-app-border text-[10px] font-mono text-ink-secondary">
               {totalDlls}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('fix-metadata')}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-sm font-medium transition-colors cursor-pointer ${
+              activeTab === 'fix-metadata'
+                ? 'bg-app-elevated text-ink-primary border-b-2 border-accent shadow-sm'
+                : 'text-ink-secondary hover:text-ink-primary hover:bg-app-elevated/50 border-b-2 border-transparent'
+            }`}
+          >
+            <Wrench className="w-3.5 h-3.5 text-accent" />
+            <span>Fix Metadata</span>
+            <span className="px-1.5 py-0.2 rounded bg-accent/15 border border-accent/30 text-[10px] font-mono text-accent font-semibold">
+              EA→FA v29
             </span>
           </button>
         </nav>

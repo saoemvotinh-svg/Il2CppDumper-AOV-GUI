@@ -4,12 +4,13 @@ import { BinaryDropzone } from './components/BinaryDropzone';
 import { EngineConfig } from './components/EngineConfig';
 import { TerminalView } from './components/TerminalView';
 import { ArtifactsExplorer } from './components/ArtifactsExplorer';
+import { MetadataFixer } from './components/MetadataFixer';
 import type { DumperConfig, SystemStatus, LogEntry, ArtifactData } from './types';
 import { Play, Square, FolderOpen, Check, Loader2 } from 'lucide-react';
 import { apiUrl } from './config';
 
 export function App() {
-  const [activeTab, setActiveTab] = useState<'dump' | 'artifacts'>('dump');
+  const [activeTab, setActiveTab] = useState<'dump' | 'artifacts' | 'fix-metadata'>('dump');
   const [isRunning, setIsRunning] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -263,11 +264,22 @@ export function App() {
               setAutoScroll={setAutoScroll}
             />
           </div>
-        ) : (
+        ) : activeTab === 'artifacts' ? (
           <ArtifactsExplorer
             artifacts={artifacts}
             onRefresh={fetchArtifacts}
             onOpenFolder={handleOpenFolder}
+          />
+        ) : (
+          <MetadataFixer
+            onSwitchToPipeline={(newMeta) => {
+              if (newMeta) {
+                setMetadataPath(newMeta);
+                setMetadataExists(true);
+              }
+              setActiveTab('dump');
+            }}
+            onRefreshArtifacts={fetchArtifacts}
           />
         )}
       </main>

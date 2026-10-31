@@ -954,6 +954,213 @@ function createBridgeApp() {
     }
   });
 
+  // --- METADATA HEADER SCANNER & FIXER ---
+  app.get('/api/fix-metadata/defaults', (req, res) => {
+    const ws = resolveWorkspaceDefaults();
+    
+    // Candidates for metadata
+    const metaCandidates = [
+      'c:\\Users\\hung\\Desktop\\REATEST\\analysis-output\\decompiled\\payload\\device-unpack\\176857764\\Managed\\Metadata\\global-metadata.dat',
+      ws.metadataPath,
+      path.join(ws.workspaceDir, 'global-metadata.dat'),
+      path.join(ws.workspaceDir, 'input', 'global-metadata.dat')
+    ];
+    let defaultMeta = metaCandidates.find(p => p && fs.existsSync(p)) || metaCandidates[0];
+
+    // Candidates for memory dump (.bin or .dat)
+    let defaultDump = path.join(ws.workspaceDir, 'com.garena.game.kgvn-memory.bin');
+    if (!fs.existsSync(defaultDump)) {
+      try {
+        const files = fs.readdirSync(ws.workspaceDir);
+        const found = files.find(f => (f.endsWith('.bin') || f.endsWith('.dat')) && f !== 'global-metadata.dat');
+        if (found) defaultDump = path.join(ws.workspaceDir, found);
+      } catch {}
+    }
+
+    // Default output path
+    const defaultOutput = defaultMeta
+      ? path.join(path.dirname(defaultMeta), 'global-metadata-fixed.dat')
+      : path.join(ws.workspaceDir, 'global-metadata-fixed.dat');
+
+    res.json({
+      metadataPath: defaultMeta,
+      metadataExists: fs.existsSync(defaultMeta),
+      dumpPath: defaultDump,
+      dumpExists: fs.existsSync(defaultDump),
+      outputPath: defaultOutput
+    });
+  });
+
+  app.post('/api/fix-metadata/scan', (req, res) => {
+    const { dumpPath, searchMode = 'auto' } = req.body;
+    if (!dumpPath || !fs.existsSync(dumpPath)) {
+      return res.status(400).json({ error: `File not found: ${dumpPath}` });
+    }
+
+    try {
+      const data = fs.readFileSync(dumpPath);
+      const candidates = [];
+      const magics = [
+        { magic: Buffer.from([0xaf, 0x1b, 0xb1, 0xea]), name: 'Tencent EA (0xEAB11BAF)', isEa: true },
+        { magic: Buffer.from([0xaf, 0x1b, 0xb1, 0xfa]), name: 'Standard Unity FA (0xFAB11BAF)', isEa: false }
+      ];
+
+      for (const m of magics) {
+        let pos = 0;
+        while (pos <= data.length - 256) {
+          pos = data.indexOf(m.magic, pos);
+          if (pos === -1 || pos > data.length - 256) break;
+
+          const version = data.readInt32LE(pos + 4);
+          if (version >= 16 && version <= 31) {
+            let headerSize = 256;
+            if (version === 24) headerSize = 272;
+            else if (version > 24 && version < 27) headerSize = 264;
+            else if (version >= 27) headerSize = 256;
+
+            const stringLiteralOffset = data.readUInt32LE(pos + 8);
+            const stringLiteralSize = data.readInt32LE(pos + 12);
+            const stringLiteralDataOffset = data.readUInt32LE(pos + 16);
+            const stringLiteralDataSize = data.readInt32LE(pos + 20);
+            const stringOffset = data.readUInt32LE(pos + 24);
+            const stringSize = data.readInt32LE(pos + 28);
+            const eventsOffset = data.readUInt32LE(pos + 32);
+            const propertiesOffset = data.readUInt32LE(pos + 40);
+            const methodsOffset = data.readUInt32LE(pos + 48);
+
+            // Sanity check
+            const isValid = stringLiteralDataOffset >= 0x100 && stringOffset > 0 && stringLiteralOffset > 0;
+
+            candidates.push({
+              offset: pos,
+              offsetHex: '0x' + pos.toString(16),
+              magicHex: m.magic.toString('hex'),
+              magicName: m.name,
+              isEa: m.isEa,
+              version,
+              headerSize,
+              stringLiteralOffset: '0x' + stringLiteralOffset.toString(16),
+              stringLiteralDataOffset: '0x' + stringLiteralDataOffset.toString(16),
+              stringOffset: '0x' + stringOffset.toString(16),
+              stringSize,
+              eventsOffset: '0x' + eventsOffset.toString(16),
+              propertiesOffset: '0x' + propertiesOffset.toString(16),
+              methodsOffset: '0x' + methodsOffset.toString(16),
+              isValid,
+              previewHex: data.slice(pos, pos + 32).toString('hex')
+            });
+          }
+          pos += 1;
+        }
+      }
+
+      // Sort: valid and matching searchMode first
+      candidates.sort((a, b) => {
+        if (a.isValid !== b.isValid) return b.isValid ? 1 : -1;
+        if (a.version === 29 && b.version !== 29) return -1;
+        if (b.version === 29 && a.version !== 29) return 1;
+        return a.offset - b.offset;
+      });
+
+      res.json({
+        success: true,
+        totalFound: candidates.length,
+        candidates,
+        recommended: candidates[0] || null
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/fix-metadata/apply', (req, res) => {
+    const {
+      dumpPath,
+      metadataPath,
+      headerOffset = 0,
+      headerSize = 256,
+      patchEaToFa = true,
+      outputPath,
+      setAsActive = false
+    } = req.body;
+
+    if (!dumpPath || !fs.existsSync(dumpPath)) {
+      return res.status(400).json({ error: `Memory dump file not found: ${dumpPath}` });
+    }
+    if (!metadataPath || !fs.existsSync(metadataPath)) {
+      return res.status(400).json({ error: `Target metadata file not found: ${metadataPath}` });
+    }
+    if (!outputPath) {
+      return res.status(400).json({ error: `Output path not specified` });
+    }
+
+    try {
+      const dumpBuf = fs.readFileSync(dumpPath);
+      const offsetNum = typeof headerOffset === 'string' && headerOffset.startsWith('0x')
+        ? parseInt(headerOffset, 16)
+        : Number(headerOffset);
+
+      if (offsetNum + headerSize > dumpBuf.length) {
+        return res.status(400).json({
+          error: `Header offset (${offsetNum}) + size (${headerSize}) exceeds dump file length (${dumpBuf.length})`
+        });
+      }
+
+      const header = Buffer.from(dumpBuf.slice(offsetNum, offsetNum + headerSize));
+
+      let patched = false;
+      const originalMagic = header.slice(0, 4).toString('hex');
+      
+      // Check if magic has EA (af1bb1ea) and user requested patch
+      if (patchEaToFa) {
+        if (header[0] === 0xaf && header[1] === 0x1b && header[2] === 0xb1 && header[3] === 0xea) {
+          header[3] = 0xfa; // EA -> FA (0xFAB11BAF)
+          patched = true;
+        }
+      }
+
+      const metaBuf = fs.readFileSync(metadataPath);
+      if (metaBuf.length < headerSize) {
+        return res.status(400).json({ error: `Metadata file is too small (${metaBuf.length} bytes)` });
+      }
+
+      const origHeaderPreview = metaBuf.slice(0, 32).toString('hex');
+      const newHeaderPreview = header.slice(0, 32).toString('hex');
+
+      // Replace header
+      header.copy(metaBuf, 0, 0, headerSize);
+
+      const outDir = path.dirname(outputPath);
+      if (!fs.existsSync(outDir)) {
+        fs.mkdirSync(outDir, { recursive: true });
+      }
+
+      fs.writeFileSync(outputPath, metaBuf);
+
+      if (setAsActive) {
+        const ws = resolveWorkspaceDefaults();
+        const activePath = path.join(ws.workspaceDir, 'global-metadata.dat');
+        fs.writeFileSync(activePath, metaBuf);
+      }
+
+      res.json({
+        success: true,
+        outputPath,
+        fileSize: metaBuf.length,
+        headerOffset: offsetNum,
+        headerSize,
+        patched,
+        originalMagic,
+        finalMagic: header.slice(0, 4).toString('hex'),
+        version: header.readInt32LE(4),
+        origHeaderPreview,
+        newHeaderPreview
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // SPA fallback
   if (fs.existsSync(distPath)) {
     app.use((req, res, next) => {

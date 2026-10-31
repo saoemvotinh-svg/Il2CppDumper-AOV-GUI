@@ -148,6 +148,39 @@ export interface DllClassSummary {
   childCount: number;
 }
 
+export interface HeaderCandidate {
+  offset: number;
+  offsetHex: string;
+  magicHex: string;
+  magicName: string;
+  isEa: boolean;
+  version: number;
+  headerSize: number;
+  stringLiteralOffset: string;
+  stringLiteralDataOffset: string;
+  stringOffset: string;
+  stringSize: number;
+  eventsOffset: string;
+  propertiesOffset: string;
+  methodsOffset: string;
+  isValid: boolean;
+  previewHex: string;
+}
+
+export interface FixMetadataResult {
+  success: boolean;
+  outputPath: string;
+  fileSize: number;
+  headerOffset: number;
+  headerSize: number;
+  patched: boolean;
+  originalMagic: string;
+  finalMagic: string;
+  version: number;
+  origHeaderPreview: string;
+  newHeaderPreview: string;
+}
+
 declare global {
   interface Window {
     electronAPI?: {

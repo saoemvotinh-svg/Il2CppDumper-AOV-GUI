@@ -29,6 +29,8 @@ workspace/**/*.so
 workspace/**/*.dat
 workspace/**/*.dll
 workspace/**/*.exe
+workspace/**/*.bin
+workspace/*.bin
 workspace/output/*
 !workspace/output/.gitkeep
 !workspace/README.txt
