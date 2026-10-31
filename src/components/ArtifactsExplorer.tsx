@@ -235,135 +235,6 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
         </div>
       </section>
 
-      {/* IDA Pro & Ghidra Mapping Scripts Panel */}
-      <section className="panel-frame">
-        <div className="panel-header flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Cpu className="w-3.5 h-3.5 text-accent" />
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-primary">
-              IDA Pro & Ghidra Mapping Scripts (Auto-Symbolizer & Struct Typer)
-            </h3>
-          </div>
-          <span className="text-[11px] text-accent font-mono font-medium hidden sm:inline">
-            Tự động map tên hàm & struct vào libil2cpp.so
-          </span>
-        </div>
-
-        <div className="p-3.5 space-y-3">
-          {/* Quick Guide Box */}
-          <div className="p-3 rounded bg-app-subtle border border-app-border space-y-2">
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-accent">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>HƯỚNG DẪN 3 BƯỚC MAP TÊN HÀM & STRUCT VÀO IDA PRO:</span>
-            </div>
-            <ol className="text-xs text-ink-secondary space-y-1.5 pl-4 list-decimal font-mono">
-              <li>
-                <span className="font-semibold text-ink-primary">Mở libil2cpp.so</span> trong IDA Pro (chọn đúng ELF 64-bit hoặc 32-bit). Đợi IDA hoàn tất phân tích ban đầu (thanh trạng thái dưới đáy báo <code className="px-1 py-0.5 rounded bg-app-elevated border border-app-border text-accent">AU: idle</code>).
-              </li>
-              <li>
-                Nhấn tổ hợp phím <kbd className="px-1.5 py-0.5 rounded bg-app-elevated border border-app-border text-ink-primary font-bold">Alt + F7</kbd> (hoặc vào menu <code className="text-ink-primary">File -&gt; Script file...</code>).
-              </li>
-              <li>
-                Chọn file <span className="text-accent font-bold">ida_with_struct_py3.py</span> trong thư mục output bên dưới. Script sẽ tự động nhận diện <code className="text-ink-primary">script.json</code> & <code className="text-ink-primary">il2cpp.h</code> cùng thư mục, tự động map toàn bộ hàng chục ngàn tên hàm, tham số và struct vào IDA!
-              </li>
-            </ol>
-          </div>
-
-          {/* Script Cards Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {[
-              {
-                fileName: 'ida_with_struct_py3.py',
-                title: 'IDA Pro with Structs (Khuyên dùng ⭐)',
-                desc: 'Đọc script.json & nạp il2cpp.h vào IDA Type Engine. Tự động đổi tên toàn bộ hàm, ép kiểu tham số, gán struct và string literals.',
-                tag: 'Python 3 / IDA 7.x-9.x',
-                badge: 'Recommended ⭐',
-                isHot: true,
-              },
-              {
-                fileName: 'ida_py3.py',
-                title: 'IDA Pro Basic Script',
-                desc: 'Đổi tên hàm và chuỗi nhanh chóng từ script.json (dành cho trường hợp không cần nạp struct C hoặc binary có định nghĩa xung đột).',
-                tag: 'Python 3 / IDA 7.x-9.x',
-                badge: 'Standard',
-                isHot: false,
-              },
-              {
-                fileName: 'ghidra_with_struct.py',
-                title: 'Ghidra with Structs',
-                desc: 'Nạp cấu trúc struct từ il2cpp.h và map symbol từ script.json vào dự án Ghidra 10.x / 11.x.',
-                tag: 'Ghidra Script',
-                badge: 'Ghidra',
-                isHot: false,
-              },
-            ].map((script) => {
-              const scriptPath = artifacts?.directory ? `${artifacts.directory}\\${script.fileName}` : script.fileName;
-              const matched = artifacts?.artifacts.find((a) => a.name === script.fileName);
-              return (
-                <div
-                  key={script.fileName}
-                  className={`p-3 rounded border flex flex-col justify-between space-y-2.5 transition-colors ${
-                    script.isHot
-                      ? 'bg-accent/5 border-accent/40'
-                      : 'bg-app-workspace border-app-border hover:border-app-border-hover'
-                  }`}
-                >
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between gap-1.5">
-                      <div className="flex items-center gap-1.5">
-                        <Terminal className={`w-3.5 h-3.5 ${script.isHot ? 'text-accent' : 'text-ink-secondary'}`} />
-                        <span className="text-xs font-mono font-bold text-ink-primary">{script.fileName}</span>
-                      </div>
-                      <span
-                        className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                          script.isHot
-                            ? 'bg-accent/20 text-accent font-semibold border border-accent/30'
-                            : 'bg-app-elevated text-ink-muted border border-app-border'
-                        }`}
-                      >
-                        {script.badge}
-                      </span>
-                    </div>
-
-                    <p className="text-[11px] text-ink-secondary leading-relaxed">{script.desc}</p>
-                    <div className="text-[10px] font-mono text-ink-muted">
-                      {matched ? `Kích thước: ${formatBytes(matched.size)}` : 'Sẵn sàng trong thư mục output'}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 pt-1 border-t border-app-border/60">
-                    <button
-                      onClick={() => copyToClipboard(scriptPath)}
-                      className="btn-secondary-action flex-1 py-1 text-xs flex items-center justify-center gap-1.5 cursor-pointer font-medium"
-                      title={scriptPath}
-                    >
-                      {copiedText === scriptPath ? (
-                        <>
-                          <Check className="w-3 h-3 text-emerald-400" />
-                          <span className="text-emerald-400 font-semibold">Copied Path!</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3 h-3 text-ink-secondary" />
-                          <span>Copy Script Path</span>
-                        </>
-                      )}
-                    </button>
-                    <button
-                      onClick={onOpenFolder}
-                      className="btn-secondary-action px-2 py-1 text-xs flex items-center gap-1 cursor-pointer font-medium"
-                      title="Mở thư mục chứa file"
-                    >
-                      <FolderOpen className="w-3 h-3 text-accent" />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
       {/* Deep Symbol Search In dump.cs */}
       <section className="panel-frame">
         <div className="panel-header flex items-center justify-between">
@@ -732,6 +603,135 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* IDA Pro & Ghidra Mapping Scripts Panel */}
+      <section className="panel-frame">
+        <div className="panel-header flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Cpu className="w-3.5 h-3.5 text-accent" />
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-primary">
+              IDA Pro & Ghidra Mapping Scripts (Auto-Symbolizer & Struct Typer)
+            </h3>
+          </div>
+          <span className="text-[11px] text-accent font-mono font-medium hidden sm:inline">
+            Tự động map tên hàm & struct vào libil2cpp.so
+          </span>
+        </div>
+
+        <div className="p-3.5 space-y-3">
+          {/* Quick Guide Box */}
+          <div className="p-3 rounded bg-app-subtle border border-app-border space-y-2">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-accent">
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>HƯỚNG DẪN 3 BƯỚC MAP TÊN HÀM & STRUCT VÀO IDA PRO:</span>
+            </div>
+            <ol className="text-xs text-ink-secondary space-y-1.5 pl-4 list-decimal font-mono">
+              <li>
+                <span className="font-semibold text-ink-primary">Mở libil2cpp.so</span> trong IDA Pro (chọn đúng ELF 64-bit hoặc 32-bit). Đợi IDA hoàn tất phân tích ban đầu (thanh trạng thái dưới đáy báo <code className="px-1 py-0.5 rounded bg-app-elevated border border-app-border text-accent">AU: idle</code>).
+              </li>
+              <li>
+                Nhấn tổ hợp phím <kbd className="px-1.5 py-0.5 rounded bg-app-elevated border border-app-border text-ink-primary font-bold">Alt + F7</kbd> (hoặc vào menu <code className="text-ink-primary">File -&gt; Script file...</code>).
+              </li>
+              <li>
+                Chọn file <span className="text-accent font-bold">ida_with_struct_py3.py</span> trong thư mục output bên dưới. Script sẽ tự động nhận diện <code className="text-ink-primary">script.json</code> & <code className="text-ink-primary">il2cpp.h</code> cùng thư mục, tự động map toàn bộ hàng chục ngàn tên hàm, tham số và struct vào IDA!
+              </li>
+            </ol>
+          </div>
+
+          {/* Script Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {[
+              {
+                fileName: 'ida_with_struct_py3.py',
+                title: 'IDA Pro with Structs (Khuyên dùng ⭐)',
+                desc: 'Đọc script.json & nạp il2cpp.h vào IDA Type Engine. Tự động đổi tên toàn bộ hàm, ép kiểu tham số, gán struct và string literals.',
+                tag: 'Python 3 / IDA 7.x-9.x',
+                badge: 'Recommended ⭐',
+                isHot: true,
+              },
+              {
+                fileName: 'ida_py3.py',
+                title: 'IDA Pro Basic Script',
+                desc: 'Đổi tên hàm và chuỗi nhanh chóng từ script.json (dành cho trường hợp không cần nạp struct C hoặc binary có định nghĩa xung đột).',
+                tag: 'Python 3 / IDA 7.x-9.x',
+                badge: 'Standard',
+                isHot: false,
+              },
+              {
+                fileName: 'ghidra_with_struct.py',
+                title: 'Ghidra with Structs',
+                desc: 'Nạp cấu trúc struct từ il2cpp.h và map symbol từ script.json vào dự án Ghidra 10.x / 11.x.',
+                tag: 'Ghidra Script',
+                badge: 'Ghidra',
+                isHot: false,
+              },
+            ].map((script) => {
+              const scriptPath = artifacts?.directory ? `${artifacts.directory}\\${script.fileName}` : script.fileName;
+              const matched = artifacts?.artifacts.find((a) => a.name === script.fileName);
+              return (
+                <div
+                  key={script.fileName}
+                  className={`p-3 rounded border flex flex-col justify-between space-y-2.5 transition-colors ${
+                    script.isHot
+                      ? 'bg-accent/5 border-accent/40'
+                      : 'bg-app-workspace border-app-border hover:border-app-border-hover'
+                  }`}
+                >
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <Terminal className={`w-3.5 h-3.5 ${script.isHot ? 'text-accent' : 'text-ink-secondary'}`} />
+                        <span className="text-xs font-mono font-bold text-ink-primary">{script.fileName}</span>
+                      </div>
+                      <span
+                        className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                          script.isHot
+                            ? 'bg-accent/20 text-accent font-semibold border border-accent/30'
+                            : 'bg-app-elevated text-ink-muted border border-app-border'
+                        }`}
+                      >
+                        {script.badge}
+                      </span>
+                    </div>
+
+                    <p className="text-[11px] text-ink-secondary leading-relaxed">{script.desc}</p>
+                    <div className="text-[10px] font-mono text-ink-muted">
+                      {matched ? `Kích thước: ${formatBytes(matched.size)}` : 'Sẵn sàng trong thư mục output'}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-1 border-t border-app-border/60">
+                    <button
+                      onClick={() => copyToClipboard(scriptPath)}
+                      className="btn-secondary-action flex-1 py-1 text-xs flex items-center justify-center gap-1.5 cursor-pointer font-medium"
+                      title={scriptPath}
+                    >
+                      {copiedText === scriptPath ? (
+                        <>
+                          <Check className="w-3 h-3 text-emerald-400" />
+                          <span className="text-emerald-400 font-semibold">Copied Path!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3 h-3 text-ink-secondary" />
+                          <span>Copy Script Path</span>
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={onOpenFolder}
+                      className="btn-secondary-action px-2 py-1 text-xs flex items-center gap-1 cursor-pointer font-medium"
+                      title="Mở thư mục chứa file"
+                    >
+                      <FolderOpen className="w-3 h-3 text-accent" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>
