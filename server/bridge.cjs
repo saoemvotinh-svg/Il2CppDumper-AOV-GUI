@@ -316,12 +316,409 @@ function createBridgeApp() {
     }
   });
 
-  // Search within dump.cs
+  // --- DUMP.CS AST & SYMBOL ENGINE ---
+  let dumpRegistryCache = null;
+
+  function splitParameters(raw) {
+    if (!raw || !raw.trim()) return [];
+    const result = [];
+    let depth = 0;
+    let cur = '';
+    for (let i = 0; i < raw.length; i++) {
+      const ch = raw[i];
+      if (ch === '<') depth++;
+      else if (ch === '>') depth--;
+      if (ch === ',' && depth === 0) {
+        result.push(cur.trim());
+        cur = '';
+      } else {
+        cur += ch;
+      }
+    }
+    if (cur.trim()) result.push(cur.trim());
+    return result.map(p => {
+      let clean = p.trim();
+      let defaultValue = null;
+      const eqIdx = clean.indexOf('=');
+      if (eqIdx !== -1) {
+        defaultValue = clean.slice(eqIdx + 1).trim();
+        clean = clean.slice(0, eqIdx).trim();
+      }
+      const parts = clean.split(/\s+/);
+      const name = parts.pop() || '';
+      const type = parts.join(' ') || '';
+      return { name, type, defaultValue, raw: p };
+    });
+  }
+
+  async function getOrBuildDumpRegistry(dumpPath) {
+    if (!fs.existsSync(dumpPath)) return null;
+    const stat = fs.statSync(dumpPath);
+    if (dumpRegistryCache && dumpRegistryCache.dumpPath === dumpPath && dumpRegistryCache.mtime === stat.mtimeMs) {
+      return dumpRegistryCache;
+    }
+
+    const stream = fs.createReadStream(dumpPath, { encoding: 'utf8' });
+    const images = [];
+    let inHeader = true;
+    const classes = [];
+    const classByTypeDef = new Map();
+    const classByName = new Map();
+    const childrenByBase = new Map();
+    const dllMap = new Map();
+
+    let currentNamespace = '';
+    let lineNum = 0;
+    let bytePos = 0;
+    let remaining = '';
+
+    for await (const chunk of stream) {
+      const lines = (remaining + chunk).split('\n');
+      remaining = lines.pop();
+
+      for (const line of lines) {
+        lineNum++;
+        const lineByteLength = Buffer.byteLength(line, 'utf8') + 1;
+
+        if (inHeader) {
+          const imgMatch = line.match(/^\/\/\s*Image\s+(\d+):\s+(.+?)\s+-\s+(\d+)/);
+          if (imgMatch) {
+            const item = { index: parseInt(imgMatch[1], 10), name: imgMatch[2], startIdx: parseInt(imgMatch[3], 10) };
+            images.push(item);
+            dllMap.set(item.name, []);
+            bytePos += lineByteLength;
+            continue;
+          } else if (line.startsWith('// Namespace:')) {
+            inHeader = false;
+          }
+        }
+
+        if (line.startsWith('// Namespace:')) {
+          currentNamespace = line.replace('// Namespace:', '').trim();
+          bytePos += lineByteLength;
+          continue;
+        }
+
+        const classMatch = line.match(/(public|protected|private|internal)?\s*(abstract|sealed|static)?\s*(class|struct|interface|enum)\s+([A-Za-z0-9_<>`]+)(?:\s*:\s*([^{]+))?\s*\/\/\s*TypeDefIndex:\s*(\d+)/);
+        if (classMatch) {
+          const typeDefIdx = parseInt(classMatch[6], 10);
+          let dllName = 'Unknown';
+          for (let i = images.length - 1; i >= 0; i--) {
+            if (typeDefIdx >= images[i].startIdx) {
+              dllName = images[i].name;
+              break;
+            }
+          }
+          const inheritance = classMatch[5] ? classMatch[5].trim().split(',').map(s => s.trim()) : [];
+          const baseClass = inheritance[0] || null;
+          const name = classMatch[4];
+          const meta = {
+            name,
+            kind: classMatch[3],
+            access: classMatch[1] || 'public',
+            modifier: classMatch[2] || '',
+            baseClass,
+            interfaces: inheritance.slice(1),
+            namespace: currentNamespace,
+            typeDefIndex: typeDefIdx,
+            dll: dllName,
+            startLine: lineNum,
+            byteOffset: bytePos
+          };
+
+          classes.push(meta);
+          classByTypeDef.set(typeDefIdx, meta);
+          if (!classByName.has(name)) classByName.set(name, []);
+          classByName.get(name).push(meta);
+
+          if (dllMap.has(dllName)) {
+            dllMap.get(dllName).push(meta);
+          }
+
+          if (baseClass) {
+            if (!childrenByBase.has(baseClass)) childrenByBase.set(baseClass, []);
+            childrenByBase.get(baseClass).push(name);
+          }
+        }
+
+        bytePos += lineByteLength;
+      }
+    }
+
+    dumpRegistryCache = {
+      dumpPath,
+      mtime: stat.mtimeMs,
+      images,
+      classes,
+      classByTypeDef,
+      classByName,
+      childrenByBase,
+      dllMap
+    };
+    return dumpRegistryCache;
+  }
+
+  async function parseClassDetails(dumpPath, registry, typeDefIndex, targetName) {
+    let targetClass = null;
+    if (typeDefIndex !== undefined && typeDefIndex !== null && typeDefIndex !== '') {
+      targetClass = registry.classByTypeDef.get(parseInt(typeDefIndex, 10));
+    }
+    if (!targetClass && targetName) {
+      const list = registry.classByName.get(targetName);
+      if (list && list.length > 0) targetClass = list[0];
+    }
+    if (!targetClass) return null;
+
+    const readline = require('readline');
+    const readStart = Math.max(0, targetClass.byteOffset - 250);
+    const rl = readline.createInterface({
+      input: fs.createReadStream(dumpPath, { start: readStart, encoding: 'utf8' })
+    });
+
+    const lines = [];
+    let foundStart = false;
+
+    for await (const l of rl) {
+      if (!foundStart) {
+        if (l.includes(`TypeDefIndex: ${targetClass.typeDefIndex}`)) {
+          foundStart = true;
+          lines.push(l);
+        }
+      } else {
+        lines.push(l);
+        if (lines.length > 3 && l.trim() === '}') {
+          break;
+        }
+      }
+    }
+    rl.close();
+
+    const fields = [];
+    const methods = [];
+    const properties = [];
+    let currentSection = '';
+    let lastRva = null;
+
+    for (const l of lines) {
+      const trimmed = l.trim();
+      if (trimmed === '// Fields') { currentSection = 'fields'; continue; }
+      if (trimmed === '// Methods') { currentSection = 'methods'; continue; }
+      if (trimmed === '// Properties') { currentSection = 'properties'; continue; }
+
+      if (trimmed.startsWith('// RVA:')) {
+        const m = trimmed.match(/RVA:\s*0x([0-9A-Fa-f]+)\s+Offset:\s*0x([0-9A-Fa-f]+)\s+VA:\s*0x([0-9A-Fa-f]+)(?:\s+Slot:\s*(\d+))?/);
+        if (m) lastRva = { rva: '0x' + m[1], offset: '0x' + m[2], va: '0x' + m[3], slot: m[4] || null };
+        continue;
+      }
+
+      if (currentSection === 'fields' && trimmed.includes(';') && !trimmed.startsWith('[')) {
+        const fieldMatch = trimmed.match(/(public|protected|private|internal)?\s*(static|readonly|const)?\s*([A-Za-z0-9_<>`\[\],\s]+?)\s+([A-Za-z0-9_]+);\s*(?:\/\/\s*(0x[0-9A-Fa-f]+))?/);
+        if (fieldMatch) {
+          fields.push({
+            access: fieldMatch[1] || 'private',
+            modifier: fieldMatch[2] || '',
+            type: fieldMatch[3].trim(),
+            name: fieldMatch[4].trim(),
+            offset: fieldMatch[5] || null,
+            raw: trimmed
+          });
+        }
+        continue;
+      }
+
+      if (currentSection === 'methods' && ((trimmed.includes('(') && trimmed.includes('{')) || trimmed.includes(');'))) {
+        const methodMatch = trimmed.match(/(public|protected|private|internal)?\s*(virtual|override|abstract|static)?\s*([A-Za-z0-9_<>`\[\],\s]+?)\s+([A-Za-z0-9_<>`\.]+)\((.*?)\)/);
+        if (methodMatch) {
+          const rawParams = methodMatch[5].trim();
+          const params = splitParameters(rawParams);
+          methods.push({
+            access: methodMatch[1] || 'private',
+            modifier: methodMatch[2] || '',
+            returnType: methodMatch[3].trim(),
+            name: methodMatch[4].trim(),
+            parameters: params,
+            paramCount: params.length,
+            rva: lastRva?.rva || null,
+            offset: lastRva?.offset || null,
+            slot: lastRva?.slot || null,
+            raw: trimmed
+          });
+        }
+        lastRva = null;
+        continue;
+      }
+
+      if (currentSection === 'properties' && (trimmed.includes('{ get') || trimmed.includes('{ set'))) {
+        properties.push({ raw: trimmed });
+      }
+    }
+
+    const childClasses = registry.childrenByBase.get(targetClass.name) || [];
+
+    return {
+      meta: {
+        ...targetClass,
+        childClasses,
+        childCount: childClasses.length
+      },
+      fields,
+      methods,
+      properties,
+      sourceCode: lines.join('\n')
+    };
+  }
+
+  async function searchDumpSymbols(dumpPath, registry, query, symbolTypeFilter = 'all', limit = 40) {
+    const readline = require('readline');
+    const rl = readline.createInterface({ input: fs.createReadStream(dumpPath, { encoding: 'utf8' }) });
+    const qLower = query.toLowerCase();
+
+    let currentNamespace = '';
+    let currentClass = null;
+    let lastRva = null;
+    let lineNum = 0;
+    const results = [];
+
+    for await (const line of rl) {
+      lineNum++;
+      if (line.startsWith('// Namespace:')) {
+        currentNamespace = line.replace('// Namespace:', '').trim();
+        continue;
+      }
+
+      const classMatch = line.match(/(public|protected|private|internal)?\s*(abstract|sealed|static)?\s*(class|struct|interface|enum)\s+([A-Za-z0-9_<>`]+)(?:\s*:\s*([^{]+))?\s*\/\/\s*TypeDefIndex:\s*(\d+)/);
+      if (classMatch) {
+        const typeDefIdx = parseInt(classMatch[6], 10);
+        currentClass = registry.classByTypeDef.get(typeDefIdx);
+        if (currentClass && (symbolTypeFilter === 'all' || symbolTypeFilter === 'class')) {
+          if (currentClass.name.toLowerCase().includes(qLower)) {
+            const childClasses = registry.childrenByBase.get(currentClass.name) || [];
+            results.push({
+              symbolType: 'class',
+              name: currentClass.name,
+              kind: currentClass.kind,
+              signature: line.trim(),
+              access: currentClass.access,
+              returnType: currentClass.kind,
+              parameters: [],
+              paramCount: 0,
+              rva: null,
+              offset: null,
+              enclosingClass: currentClass.name,
+              baseClass: currentClass.baseClass,
+              childClasses,
+              childCount: childClasses.length,
+              interfaces: currentClass.interfaces,
+              namespace: currentClass.namespace,
+              dll: currentClass.dll,
+              typeDefIndex: currentClass.typeDefIndex,
+              line: lineNum
+            });
+            if (results.length >= limit) break;
+          }
+        }
+        continue;
+      }
+
+      if (line.trim().startsWith('// RVA:')) {
+        const rvaM = line.match(/RVA:\s*0x([0-9A-Fa-f]+)\s+Offset:\s*0x([0-9A-Fa-f]+)\s+VA:\s*0x([0-9A-Fa-f]+)(?:\s+Slot:\s*(\d+))?/);
+        if (rvaM) {
+          lastRva = {
+            rva: '0x' + rvaM[1],
+            offset: '0x' + rvaM[2],
+            va: '0x' + rvaM[3],
+            slot: rvaM[4] || null
+          };
+        }
+        continue;
+      }
+
+      const trimmed = line.trim();
+      if (trimmed.toLowerCase().includes(qLower) && currentClass) {
+        // Method check
+        if ((symbolTypeFilter === 'all' || symbolTypeFilter === 'method') &&
+            ((trimmed.includes('(') && trimmed.includes('{')) || trimmed.includes(');'))) {
+          const methodMatch = trimmed.match(/(public|protected|private|internal)?\s*(virtual|override|abstract|static)?\s*([A-Za-z0-9_<>`\[\],\s]+?)\s+([A-Za-z0-9_<>`\.]+)\((.*?)\)/);
+          if (methodMatch && methodMatch[4].toLowerCase().includes(qLower)) {
+            const rawParams = methodMatch[5].trim();
+            const params = splitParameters(rawParams);
+            const childClasses = registry.childrenByBase.get(currentClass.name) || [];
+
+            results.push({
+              symbolType: 'method',
+              name: methodMatch[4].trim(),
+              signature: trimmed,
+              access: methodMatch[1] || 'private',
+              modifier: methodMatch[2] || '',
+              returnType: methodMatch[3].trim(),
+              parameters: params,
+              paramCount: params.length,
+              rva: lastRva?.rva || null,
+              offset: lastRva?.offset || null,
+              va: lastRva?.va || null,
+              slot: lastRva?.slot || null,
+              enclosingClass: currentClass.name,
+              baseClass: currentClass.baseClass,
+              childClasses,
+              childCount: childClasses.length,
+              interfaces: currentClass.interfaces,
+              namespace: currentClass.namespace,
+              dll: currentClass.dll,
+              typeDefIndex: currentClass.typeDefIndex,
+              line: lineNum
+            });
+            if (results.length >= limit) break;
+          }
+        }
+        // Field check
+        else if ((symbolTypeFilter === 'all' || symbolTypeFilter === 'field') &&
+                 trimmed.includes(';') && !trimmed.startsWith('[')) {
+          const fieldMatch = trimmed.match(/(public|protected|private|internal)?\s*(static|readonly|const)?\s*([A-Za-z0-9_<>`\[\],\s]+?)\s+([A-Za-z0-9_]+);\s*(?:\/\/\s*(0x[0-9A-Fa-f]+))?/);
+          if (fieldMatch && fieldMatch[4].toLowerCase().includes(qLower)) {
+            const childClasses = registry.childrenByBase.get(currentClass.name) || [];
+            results.push({
+              symbolType: 'field',
+              name: fieldMatch[4].trim(),
+              signature: trimmed,
+              access: fieldMatch[1] || 'private',
+              modifier: fieldMatch[2] || '',
+              fieldType: fieldMatch[3].trim(),
+              returnType: fieldMatch[3].trim(),
+              parameters: [],
+              paramCount: 0,
+              offset: fieldMatch[5] || null,
+              fieldOffset: fieldMatch[5] || null,
+              rva: null,
+              enclosingClass: currentClass.name,
+              baseClass: currentClass.baseClass,
+              childClasses,
+              childCount: childClasses.length,
+              interfaces: currentClass.interfaces,
+              namespace: currentClass.namespace,
+              dll: currentClass.dll,
+              typeDefIndex: currentClass.typeDefIndex,
+              line: lineNum
+            });
+            if (results.length >= limit) break;
+          }
+        }
+      }
+
+      if (!line.trim().startsWith('// RVA:')) {
+        lastRva = null;
+      }
+    }
+
+    rl.close();
+    return results;
+  }
+
+  // Enhanced Symbol Search within dump.cs
   app.get('/api/search-dump', async (req, res) => {
     const ws = resolveWorkspaceDefaults();
-    const { query, dir = ws.outputDir, limit = 50 } = req.query;
+    const { query, dir = ws.outputDir, limit = 40, type = 'all' } = req.query;
     if (!query || query.length < 2) {
-      return res.json({ results: [] });
+      return res.json({ results: [], totalFound: 0 });
     }
 
     const dumpPath = path.join(dir, 'dump.cs');
@@ -329,35 +726,78 @@ function createBridgeApp() {
       return res.status(404).json({ error: 'dump.cs not found in target directory' });
     }
 
-    const results = [];
-    const qLower = query.toLowerCase();
+    try {
+      const t0 = Date.now();
+      const registry = await getOrBuildDumpRegistry(dumpPath);
+      const results = await searchDumpSymbols(dumpPath, registry, query, type, parseInt(limit, 10));
+      res.json({
+        results,
+        totalFound: results.length,
+        tookMs: Date.now() - t0
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
 
-    const fileStream = fs.createReadStream(dumpPath, { encoding: 'utf8' });
-    let buffer = '';
-    let lineCount = 0;
-
-    for await (const chunk of fileStream) {
-      buffer += chunk;
-      const lines = buffer.split('\n');
-      buffer = lines.pop();
-
-      for (const line of lines) {
-        lineCount++;
-        if (line.toLowerCase().includes(qLower)) {
-          results.push({
-            line: lineCount,
-            content: line.trim()
-          });
-          if (results.length >= parseInt(limit, 10)) {
-            fileStream.destroy();
-            break;
-          }
-        }
-      }
-      if (results.length >= parseInt(limit, 10)) break;
+  // Get all classes in a specific DLL
+  app.get('/api/dll-classes', async (req, res) => {
+    const ws = resolveWorkspaceDefaults();
+    const { dll, dir = ws.outputDir } = req.query;
+    if (!dll) {
+      return res.status(400).json({ error: 'DLL name required' });
     }
 
-    res.json({ results, totalFound: results.length });
+    const dumpPath = path.join(dir, 'dump.cs');
+    if (!fs.existsSync(dumpPath)) {
+      return res.status(404).json({ error: 'dump.cs not found' });
+    }
+
+    try {
+      const registry = await getOrBuildDumpRegistry(dumpPath);
+      const classes = (registry.dllMap.get(dll) || []).map(c => {
+        const childClasses = registry.childrenByBase.get(c.name) || [];
+        return {
+          name: c.name,
+          kind: c.kind,
+          namespace: c.namespace,
+          baseClass: c.baseClass,
+          interfaces: c.interfaces,
+          typeDefIndex: c.typeDefIndex,
+          childCount: childClasses.length
+        };
+      });
+
+      res.json({
+        dll,
+        totalClasses: classes.length,
+        classes
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Get full class details (fields, methods, code)
+  app.get('/api/class-details', async (req, res) => {
+    const ws = resolveWorkspaceDefaults();
+    const { typeDefIndex, name, dir = ws.outputDir } = req.query;
+
+    const dumpPath = path.join(dir, 'dump.cs');
+    if (!fs.existsSync(dumpPath)) {
+      return res.status(404).json({ error: 'dump.cs not found' });
+    }
+
+    try {
+      const registry = await getOrBuildDumpRegistry(dumpPath);
+      const details = await parseClassDetails(dumpPath, registry, typeDefIndex, name);
+      if (!details) {
+        return res.status(404).json({ error: 'Class not found' });
+      }
+      res.json(details);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // Native Windows OpenFileDialog fallback

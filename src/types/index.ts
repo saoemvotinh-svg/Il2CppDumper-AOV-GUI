@@ -60,6 +60,94 @@ export interface SearchResult {
   content: string;
 }
 
+export interface MethodParam {
+  name: string;
+  type: string;
+  defaultValue?: string | null;
+  raw?: string;
+}
+
+export interface SymbolItem {
+  symbolType: 'method' | 'field' | 'class';
+  name: string;
+  kind?: string;
+  signature: string;
+  access?: string;
+  modifier?: string;
+  returnType?: string;
+  fieldType?: string;
+  parameters: MethodParam[];
+  paramCount: number;
+  rva?: string | null;
+  offset?: string | null;
+  va?: string | null;
+  slot?: string | null;
+  fieldOffset?: string | null;
+  enclosingClass: string;
+  baseClass?: string | null;
+  childClasses?: string[];
+  childCount: number;
+  interfaces?: string[];
+  namespace?: string;
+  dll: string;
+  typeDefIndex?: number;
+  line: number;
+}
+
+export interface ClassField {
+  access: string;
+  modifier?: string;
+  type: string;
+  name: string;
+  offset?: string | null;
+  raw: string;
+}
+
+export interface ClassMethod {
+  access: string;
+  modifier?: string;
+  returnType: string;
+  name: string;
+  parameters: MethodParam[];
+  paramCount: number;
+  rva?: string | null;
+  offset?: string | null;
+  slot?: string | null;
+  raw: string;
+}
+
+export interface ClassDetail {
+  meta: {
+    name: string;
+    kind: string;
+    access?: string;
+    modifier?: string;
+    namespace: string;
+    baseClass?: string | null;
+    interfaces: string[];
+    dll: string;
+    typeDefIndex: number;
+    childClasses: string[];
+    childCount: number;
+    startLine?: number;
+    endLine?: number | null;
+  };
+  fields: ClassField[];
+  methods: ClassMethod[];
+  properties: { raw: string }[];
+  sourceCode: string;
+}
+
+export interface DllClassSummary {
+  name: string;
+  kind: string;
+  namespace: string;
+  baseClass?: string | null;
+  interfaces: string[];
+  typeDefIndex: number;
+  childCount: number;
+}
+
 declare global {
   interface Window {
     electronAPI?: {
