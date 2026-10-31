@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -204,16 +204,24 @@ namespace Il2CppDumper
 
         public (string, string) GetMethodSpecName(Il2CppMethodSpec methodSpec, bool addNamespace = false)
         {
+            if (methodSpec.methodDefinitionIndex < 0 || methodSpec.methodDefinitionIndex >= metadata.methodDefs.Length)
+            {
+                return ($"MethodSpec_{methodSpec.methodDefinitionIndex}", $"Method_{methodSpec.methodDefinitionIndex}");
+            }
             var methodDef = metadata.methodDefs[methodSpec.methodDefinitionIndex];
-            var typeDef = metadata.typeDefs[methodDef.declaringType];
-            var typeName = GetTypeDefName(typeDef, addNamespace, false);
-            if (methodSpec.classIndexIndex != -1)
+            string typeName = "UnknownType";
+            if (methodDef.declaringType >= 0 && methodDef.declaringType < metadata.typeDefs.Length)
+            {
+                var typeDef = metadata.typeDefs[methodDef.declaringType];
+                typeName = GetTypeDefName(typeDef, addNamespace, false);
+            }
+            if (methodSpec.classIndexIndex != -1 && methodSpec.classIndexIndex >= 0 && methodSpec.classIndexIndex < il2Cpp.genericInsts.Length)
             {
                 var classInst = il2Cpp.genericInsts[methodSpec.classIndexIndex];
                 typeName += GetGenericInstParams(classInst);
             }
             var methodName = metadata.GetStringFromIndex(methodDef.nameIndex);
-            if (methodSpec.methodIndexIndex != -1)
+            if (methodSpec.methodIndexIndex != -1 && methodSpec.methodIndexIndex >= 0 && methodSpec.methodIndexIndex < il2Cpp.genericInsts.Length)
             {
                 var methodInst = il2Cpp.genericInsts[methodSpec.methodIndexIndex];
                 methodName += GetGenericInstParams(methodInst);
@@ -225,11 +233,11 @@ namespace Il2CppDumper
         {
             var classInstPointer = 0ul;
             var methodInstPointer = 0ul;
-            if (methodSpec.classIndexIndex != -1)
+            if (methodSpec.classIndexIndex != -1 && methodSpec.classIndexIndex >= 0 && methodSpec.classIndexIndex < il2Cpp.genericInstPointers.Length)
             {
                 classInstPointer = il2Cpp.genericInstPointers[methodSpec.classIndexIndex];
             }
-            if (methodSpec.methodIndexIndex != -1)
+            if (methodSpec.methodIndexIndex != -1 && methodSpec.methodIndexIndex >= 0 && methodSpec.methodIndexIndex < il2Cpp.genericInstPointers.Length)
             {
                 methodInstPointer = il2Cpp.genericInstPointers[methodSpec.methodIndexIndex];
             }
@@ -241,14 +249,20 @@ namespace Il2CppDumper
             Il2CppRGCTXDefinition[] collection = null;
             if (il2Cpp.Version >= 24.2)
             {
-                il2Cpp.rgctxsDictionary[imageName].TryGetValue(typeDef.token, out collection);
+                if (imageName != null && il2Cpp.rgctxsDictionary.TryGetValue(imageName, out var dict))
+                {
+                    dict.TryGetValue(typeDef.token, out collection);
+                }
             }
             else
             {
-                if (typeDef.rgctxCount > 0)
+                if (typeDef.rgctxCount > 0 && metadata.rgctxEntries != null)
                 {
-                    collection = new Il2CppRGCTXDefinition[typeDef.rgctxCount];
-                    Array.Copy(metadata.rgctxEntries, typeDef.rgctxStartIndex, collection, 0, typeDef.rgctxCount);
+                    if (typeDef.rgctxStartIndex >= 0 && typeDef.rgctxStartIndex + typeDef.rgctxCount <= metadata.rgctxEntries.Length)
+                    {
+                        collection = new Il2CppRGCTXDefinition[typeDef.rgctxCount];
+                        Array.Copy(metadata.rgctxEntries, typeDef.rgctxStartIndex, collection, 0, typeDef.rgctxCount);
+                    }
                 }
             }
             return collection;
@@ -259,14 +273,20 @@ namespace Il2CppDumper
             Il2CppRGCTXDefinition[] collection = null;
             if (il2Cpp.Version >= 24.2)
             {
-                il2Cpp.rgctxsDictionary[imageName].TryGetValue(methodDef.token, out collection);
+                if (imageName != null && il2Cpp.rgctxsDictionary.TryGetValue(imageName, out var dict))
+                {
+                    dict.TryGetValue(methodDef.token, out collection);
+                }
             }
             else
             {
-                if (methodDef.rgctxCount > 0)
+                if (methodDef.rgctxCount > 0 && metadata.rgctxEntries != null)
                 {
-                    collection = new Il2CppRGCTXDefinition[methodDef.rgctxCount];
-                    Array.Copy(metadata.rgctxEntries, methodDef.rgctxStartIndex, collection, 0, methodDef.rgctxCount);
+                    if (methodDef.rgctxStartIndex >= 0 && methodDef.rgctxStartIndex + methodDef.rgctxCount <= metadata.rgctxEntries.Length)
+                    {
+                        collection = new Il2CppRGCTXDefinition[methodDef.rgctxCount];
+                        Array.Copy(metadata.rgctxEntries, methodDef.rgctxStartIndex, collection, 0, methodDef.rgctxCount);
+                    }
                 }
             }
             return collection;
@@ -283,7 +303,7 @@ namespace Il2CppDumper
                 }
                 return GetTypeDefinitionFromIl2CppType(il2CppType);
             }
-            if (genericClass.typeDefinitionIndex == 4294967295 || genericClass.typeDefinitionIndex == -1)
+            if (genericClass.typeDefinitionIndex == 4294967295 || genericClass.typeDefinitionIndex == -1 || genericClass.typeDefinitionIndex >= metadata.typeDefs.Length)
             {
                 return null;
             }
@@ -296,11 +316,19 @@ namespace Il2CppDumper
             {
                 var offset = il2CppType.data.typeHandle - metadata.ImageBase - metadata.header.typeDefinitionsOffset;
                 var index = offset / (ulong)metadata.SizeOf(typeof(Il2CppTypeDefinition));
-                return metadata.typeDefs[index];
+                if (index < (ulong)metadata.typeDefs.Length)
+                {
+                    return metadata.typeDefs[index];
+                }
+                return null;
             }
             else
             {
-                return metadata.typeDefs[il2CppType.data.klassIndex];
+                if (il2CppType.data.klassIndex >= 0 && il2CppType.data.klassIndex < metadata.typeDefs.Length)
+                {
+                    return metadata.typeDefs[il2CppType.data.klassIndex];
+                }
+                return null;
             }
         }
 
@@ -310,11 +338,19 @@ namespace Il2CppDumper
             {
                 var offset = il2CppType.data.genericParameterHandle - metadata.ImageBase - metadata.header.genericParametersOffset;
                 var index = offset / (ulong)metadata.SizeOf(typeof(Il2CppGenericParameter));
-                return metadata.genericParameters[index];
+                if (index < (ulong)metadata.genericParameters.Length)
+                {
+                    return metadata.genericParameters[index];
+                }
+                return null;
             }
             else
             {
-                return metadata.genericParameters[il2CppType.data.genericParameterIndex];
+                if (il2CppType.data.genericParameterIndex >= 0 && il2CppType.data.genericParameterIndex < metadata.genericParameters.Length)
+                {
+                    return metadata.genericParameters[il2CppType.data.genericParameterIndex];
+                }
+                return null;
             }
         }
 
@@ -325,17 +361,35 @@ namespace Il2CppDumper
 
         public bool TryGetDefaultValue(int typeIndex, int dataIndex, out object value)
         {
-            var pointer = metadata.GetDefaultValueFromIndex(dataIndex);
-            var defaultValueType = il2Cpp.types[typeIndex];
-            metadata.Position = pointer;
-            if (GetConstantValueFromBlob(defaultValueType.type, metadata.Reader, out var blobValue))
+            value = null;
+            try
             {
-                value = blobValue.Value;
-                return true;
+                if (typeIndex < 0 || typeIndex >= il2Cpp.types.Length)
+                {
+                    return false;
+                }
+                var pointer = metadata.GetDefaultValueFromIndex(dataIndex);
+                if (pointer == 0 || pointer >= (ulong)metadata.Reader.BaseStream.Length)
+                {
+                    value = pointer;
+                    return false;
+                }
+                var defaultValueType = il2Cpp.types[typeIndex];
+                metadata.Position = pointer;
+                if (GetConstantValueFromBlob(defaultValueType.type, metadata.Reader, out var blobValue))
+                {
+                    value = blobValue.Value;
+                    return true;
+                }
+                else
+                {
+                    value = pointer;
+                    return false;
+                }
             }
-            else
+            catch
             {
-                value = pointer;
+                value = 0;
                 return false;
             }
         }

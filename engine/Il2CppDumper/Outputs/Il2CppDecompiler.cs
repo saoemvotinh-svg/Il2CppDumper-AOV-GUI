@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -193,7 +193,13 @@ namespace Il2CppDumper
                                     }
                                 }
                                 if (config.DumpFieldOffset && !isConst)
-                                    writer.Write("; // 0x{0:X}\n", il2Cpp.GetFieldOffsetFromIndex(typeDefIndex, i - typeDef.fieldStart, i, typeDef.IsValueType, isStatic));
+                                {
+                                    var fieldOffset = il2Cpp.GetFieldOffsetFromIndex(typeDefIndex, i - typeDef.fieldStart, i, typeDef.IsValueType, isStatic);
+                                    if (fieldOffset >= 0)
+                                        writer.Write("; // 0x{0:X}\n", fieldOffset);
+                                    else
+                                        writer.Write(";\n");
+                                }
                                 else
                                     writer.Write(";\n");
                             }
@@ -258,7 +264,18 @@ namespace Il2CppDumper
                                     }
                                     else
                                     {
-                                        writer.Write("\t// RVA: -1 Offset: -1");
+                                        if (isAbstract)
+                                        {
+                                            writer.Write("\t// RVA: -1 Offset: -1 (Abstract / Interface)");
+                                        }
+                                        else if (methodDef.genericContainerIndex >= 0)
+                                        {
+                                            writer.Write("\t// RVA: -1 Offset: -1 (Generic Template)");
+                                        }
+                                        else
+                                        {
+                                            writer.Write("\t// RVA: -1 Offset: -1 (No Direct Pointer / Stripped)");
+                                        }
                                     }
                                     if (methodDef.slot != ushort.MaxValue)
                                     {

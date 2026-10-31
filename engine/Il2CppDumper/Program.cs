@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -104,10 +104,10 @@ namespace Il2CppDumper
                     Console.WriteLine(e);
                 }
             }
-            if (config.RequireAnyKey)
+            if (config.RequireAnyKey && !Console.IsInputRedirected)
             {
                 Console.WriteLine("Press any key to exit...");
-                Console.ReadKey(true);
+                try { Console.ReadKey(true); } catch { }
             }
         }
 
@@ -256,20 +256,42 @@ namespace Il2CppDumper
             Console.WriteLine("Dumping...");
             var executor = new Il2CppExecutor(metadata, il2Cpp);
             var decompiler = new Il2CppDecompiler(executor);
-            decompiler.Decompile(config, outputDir);
-            Console.WriteLine("Done!");
+            try
+            {
+                decompiler.Decompile(config, outputDir);
+                Console.WriteLine("Done decompile!");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ERROR in Decompile: {ex.Message}\n{ex.StackTrace}");
+            }
+
             if (config.GenerateStruct)
             {
                 Console.WriteLine("Generate struct...");
-                var scriptGenerator = new StructGenerator(executor);
-                scriptGenerator.WriteScript(outputDir);
-                Console.WriteLine("Done!");
+                try
+                {
+                    var scriptGenerator = new StructGenerator(executor);
+                    scriptGenerator.WriteScript(outputDir);
+                    Console.WriteLine("Done struct & script!");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"ERROR in GenerateStruct: {ex.Message}\n{ex.StackTrace}");
+                }
             }
             if (config.GenerateDummyDll)
             {
                 Console.WriteLine("Generate dummy dll...");
-                DummyAssemblyExporter.Export(executor, outputDir, config.DummyDllAddToken);
-                Console.WriteLine("Done!");
+                try
+                {
+                    DummyAssemblyExporter.Export(executor, outputDir, config.DummyDllAddToken);
+                    Console.WriteLine("Done dummy dll!");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"ERROR in GenerateDummyDll: {ex.Message}\n{ex.StackTrace}");
+                }
             }
         }
     }

@@ -1,0 +1,107 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  --bg-app: #151719;
+  --bg-workspace: #1D2022;
+  --bg-elevated: #24282B;
+  --border-rule: #34393C;
+  --text-primary: #E4E5E2;
+  --text-secondary: #9AA19E;
+  --accent: #AE8957;
+  --status-ready: #7F9D8B;
+  --status-warning: #D1A567;
+  --status-error: #CB7775;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg-app);
+  color: var(--text-primary);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Industrial Precision Scrollbars */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: #181A1C;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2D3236;
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3E4449;
+}
+
+/* Custom Text Selection - Industrial Bronze */
+::selection {
+  background-color: #AE8957;
+  color: #151719;
+}
+
+/* Desktop Engineering Panel Framing */
+.panel-frame {
+  background-color: #1D2022;
+  border: 1px solid #34393C;
+  border-radius: 4px;
+}
+
+.panel-header {
+  background-color: #1A1C1E;
+  border-bottom: 1px solid #34393C;
+  padding: 8px 12px;
+}
+
+.control-input {
+  background-color: #24282B;
+  border: 1px solid #34393C;
+  border-radius: 4px;
+  color: #E4E5E2;
+  transition: border-color 0.15s ease;
+}
+
+.control-input:focus {
+  outline: none;
+  border-color: #AE8957;
+}
+
+.btn-primary-action {
+  background-color: #AE8957;
+  color: #151719;
+  font-weight: 600;
+  border-radius: 4px;
+  transition: background-color 0.15s ease;
+}
+
+.btn-primary-action:hover {
+  background-color: #BD9763;
+}
+
+.btn-primary-action:active {
+  background-color: #987547;
+}
+
+.btn-secondary-action {
+  background-color: #24282B;
+  color: #E4E5E2;
+  border: 1px solid #34393C;
+  border-radius: 4px;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.btn-secondary-action:hover {
+  background-color: #2C3135;
+  border-color: #454B50;
+}

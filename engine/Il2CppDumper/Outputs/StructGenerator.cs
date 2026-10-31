@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -539,6 +539,29 @@ namespace Il2CppDumper
             }
         }
 
+        private Il2CppType ResolveGenericParameterType(Il2CppType il2CppType, ulong instPointer)
+        {
+            if (instPointer == 0) return null;
+            try
+            {
+                var genericParameter = executor.GetGenericParameteFromIl2CppType(il2CppType);
+                if (genericParameter == null) return null;
+                var genericInst = il2Cpp.MapVATR<Il2CppGenericInst>(instPointer);
+                if (genericInst.type_argc <= 0 || genericInst.type_argc > 1000 || genericInst.type_argv == 0) return null;
+                var pointers = il2Cpp.MapVATR<ulong>(genericInst.type_argv, genericInst.type_argc);
+                if (genericParameter.num >= 0 && genericParameter.num < pointers.Length)
+                {
+                    var pointer = pointers[genericParameter.num];
+                    if (pointer != 0)
+                    {
+                        return il2Cpp.GetIl2CppType(pointer);
+                    }
+                }
+            }
+            catch { }
+            return null;
+        }
+
         private string ParseType(Il2CppType il2CppType, Il2CppGenericContext context = null)
         {
             switch (il2CppType.type)
@@ -594,12 +617,8 @@ namespace Il2CppDumper
                     {
                         if (context != null)
                         {
-                            var genericParameter = executor.GetGenericParameteFromIl2CppType(il2CppType);
-                            var genericInst = il2Cpp.MapVATR<Il2CppGenericInst>(context.class_inst);
-                            var pointers = il2Cpp.MapVATR<ulong>(genericInst.type_argv, genericInst.type_argc);
-                            var pointer = pointers[genericParameter.num];
-                            var type = il2Cpp.GetIl2CppType(pointer);
-                            return ParseType(type);
+                            var type = ResolveGenericParameterType(il2CppType, context.class_inst);
+                            if (type != null) return ParseType(type);
                         }
                         return "Il2CppObject*";
                     }
@@ -628,7 +647,9 @@ namespace Il2CppDumper
                         {
                             if (typeDef.IsEnum)
                             {
-                                return ParseType(il2Cpp.types[typeDef.elementTypeIndex]);
+                                if (typeDef.elementTypeIndex >= 0 && typeDef.elementTypeIndex < il2Cpp.types.Length)
+                                    return ParseType(il2Cpp.types[typeDef.elementTypeIndex]);
+                                return "int32_t";
                             }
                             return typeStructName + "_o";
                         }
@@ -657,17 +678,12 @@ namespace Il2CppDumper
                     {
                         if (context != null)
                         {
-                            var genericParameter = executor.GetGenericParameteFromIl2CppType(il2CppType);
-                            //https://github.com/Perfare/Il2CppDumper/issues/687
                             if (context.method_inst == 0 && context.class_inst != 0)
                             {
                                 goto case Il2CppTypeEnum.IL2CPP_TYPE_VAR;
                             }
-                            var genericInst = il2Cpp.MapVATR<Il2CppGenericInst>(context.method_inst);
-                            var pointers = il2Cpp.MapVATR<ulong>(genericInst.type_argv, genericInst.type_argc);
-                            var pointer = pointers[genericParameter.num];
-                            var type = il2Cpp.GetIl2CppType(pointer);
-                            return ParseType(type);
+                            var type = ResolveGenericParameterType(il2CppType, context.method_inst);
+                            if (type != null) return ParseType(type);
                         }
                         return "Il2CppObject*";
                     }
@@ -723,7 +739,7 @@ namespace Il2CppDumper
         {
             if (!typeDef.IsValueType && !typeDef.IsEnum)
             {
-                if (typeDef.parentIndex >= 0)
+                if (typeDef.parentIndex >= 0 && typeDef.parentIndex < il2Cpp.types.Length)
                 {
                     var parent = il2Cpp.types[typeDef.parentIndex];
                     if (parent.type != Il2CppTypeEnum.IL2CPP_TYPE_OBJECT)
@@ -742,7 +758,9 @@ namespace Il2CppDumper
                 var cache = new HashSet<string>(StringComparer.Ordinal);
                 for (var i = typeDef.fieldStart; i < fieldEnd; ++i)
                 {
+                    if (i < 0 || i >= metadata.fieldDefs.Length) continue;
                     var fieldDef = metadata.fieldDefs[i];
+                    if (fieldDef.typeIndex < 0 || fieldDef.typeIndex >= il2Cpp.types.Length) continue;
                     var fieldType = il2Cpp.types[fieldDef.typeIndex];
                     if ((fieldType.attrs & FIELD_ATTRIBUTE_LITERAL) != 0)
                     {
@@ -774,21 +792,26 @@ namespace Il2CppDumper
 
         private void AddVTableMethod(StructInfo structInfo, Il2CppTypeDefinition typeDef)
         {
+            if (metadata.vtableMethods == null || metadata.vtableMethods.Length == 0) return;
             var dic = new SortedDictionary<int, Il2CppMethodDefinition>();
             for (int i = 0; i < typeDef.vtable_count; i++)
             {
                 var vTableIndex = typeDef.vtableStart + i;
+                if (vTableIndex < 0 || vTableIndex >= metadata.vtableMethods.Length) continue;
                 var encodedMethodIndex = metadata.vtableMethods[vTableIndex];
                 var usage = Metadata.GetEncodedIndexType(encodedMethodIndex);
                 var index = metadata.GetDecodedMethodIndex(encodedMethodIndex);
                 Il2CppMethodDefinition methodDef;
                 if (usage == 6) //kIl2CppMetadataUsageMethodRef
                 {
+                    if (index < 0 || index >= il2Cpp.methodSpecs.Length) continue;
                     var methodSpec = il2Cpp.methodSpecs[index];
+                    if (methodSpec.methodDefinitionIndex < 0 || methodSpec.methodDefinitionIndex >= metadata.methodDefs.Length) continue;
                     methodDef = metadata.methodDefs[methodSpec.methodDefinitionIndex];
                 }
                 else
                 {
+                    if (index < 0 || index >= metadata.methodDefs.Length) continue;
                     methodDef = metadata.methodDefs[index];
                 }
                 if (methodDef.slot != ushort.MaxValue)
@@ -833,21 +856,30 @@ namespace Il2CppDumper
                     {
                         case Il2CppRGCTXDataType.IL2CPP_RGCTX_DATA_TYPE:
                             {
-                                var il2CppType = il2Cpp.types[rgctxDefData.typeIndex];
-                                structRGCTXInfo.TypeName = FixName(executor.GetTypeName(il2CppType, true, false));
+                                if (rgctxDefData.typeIndex >= 0 && rgctxDefData.typeIndex < il2Cpp.types.Length)
+                                {
+                                    var il2CppType = il2Cpp.types[rgctxDefData.typeIndex];
+                                    structRGCTXInfo.TypeName = FixName(executor.GetTypeName(il2CppType, true, false));
+                                }
                                 break;
                             }
                         case Il2CppRGCTXDataType.IL2CPP_RGCTX_DATA_CLASS:
                             {
-                                var il2CppType = il2Cpp.types[rgctxDefData.typeIndex];
-                                structRGCTXInfo.ClassName = FixName(executor.GetTypeName(il2CppType, true, false));
+                                if (rgctxDefData.typeIndex >= 0 && rgctxDefData.typeIndex < il2Cpp.types.Length)
+                                {
+                                    var il2CppType = il2Cpp.types[rgctxDefData.typeIndex];
+                                    structRGCTXInfo.ClassName = FixName(executor.GetTypeName(il2CppType, true, false));
+                                }
                                 break;
                             }
                         case Il2CppRGCTXDataType.IL2CPP_RGCTX_DATA_METHOD:
                             {
-                                var methodSpec = il2Cpp.methodSpecs[rgctxDefData.methodIndex];
-                                (var methodSpecTypeName, var methodSpecMethodName) = executor.GetMethodSpecName(methodSpec, true);
-                                structRGCTXInfo.MethodName = FixName(methodSpecTypeName + "." + methodSpecMethodName);
+                                if (rgctxDefData.methodIndex >= 0 && rgctxDefData.methodIndex < il2Cpp.methodSpecs.Length)
+                                {
+                                    var methodSpec = il2Cpp.methodSpecs[rgctxDefData.methodIndex];
+                                    (var methodSpecTypeName, var methodSpecMethodName) = executor.GetMethodSpecName(methodSpec, true);
+                                    structRGCTXInfo.MethodName = FixName(methodSpecTypeName + "." + methodSpecMethodName);
+                                }
                                 break;
                             }
                     }
@@ -879,21 +911,30 @@ namespace Il2CppDumper
                     {
                         case Il2CppRGCTXDataType.IL2CPP_RGCTX_DATA_TYPE:
                             {
-                                var il2CppType = il2Cpp.types[rgctxDefData.typeIndex];
-                                structRGCTXInfo.TypeName = FixName(executor.GetTypeName(il2CppType, true, false));
+                                if (rgctxDefData.typeIndex >= 0 && rgctxDefData.typeIndex < il2Cpp.types.Length)
+                                {
+                                    var il2CppType = il2Cpp.types[rgctxDefData.typeIndex];
+                                    structRGCTXInfo.TypeName = FixName(executor.GetTypeName(il2CppType, true, false));
+                                }
                                 break;
                             }
                         case Il2CppRGCTXDataType.IL2CPP_RGCTX_DATA_CLASS:
                             {
-                                var il2CppType = il2Cpp.types[rgctxDefData.typeIndex];
-                                structRGCTXInfo.ClassName = FixName(executor.GetTypeName(il2CppType, true, false));
+                                if (rgctxDefData.typeIndex >= 0 && rgctxDefData.typeIndex < il2Cpp.types.Length)
+                                {
+                                    var il2CppType = il2Cpp.types[rgctxDefData.typeIndex];
+                                    structRGCTXInfo.ClassName = FixName(executor.GetTypeName(il2CppType, true, false));
+                                }
                                 break;
                             }
                         case Il2CppRGCTXDataType.IL2CPP_RGCTX_DATA_METHOD:
                             {
-                                var methodSpec = il2Cpp.methodSpecs[rgctxDefData.methodIndex];
-                                (var methodSpecTypeName, var methodSpecMethodName) = executor.GetMethodSpecName(methodSpec, true);
-                                structRGCTXInfo.MethodName = FixName(methodSpecTypeName + "." + methodSpecMethodName);
+                                if (rgctxDefData.methodIndex >= 0 && rgctxDefData.methodIndex < il2Cpp.methodSpecs.Length)
+                                {
+                                    var methodSpec = il2Cpp.methodSpecs[rgctxDefData.methodIndex];
+                                    (var methodSpecTypeName, var methodSpecMethodName) = executor.GetMethodSpecName(methodSpec, true);
+                                    structRGCTXInfo.MethodName = FixName(methodSpecTypeName + "." + methodSpecMethodName);
+                                }
                                 break;
                             }
                     }
@@ -1194,12 +1235,8 @@ namespace Il2CppDumper
                     {
                         if (context != null)
                         {
-                            var genericParameter = executor.GetGenericParameteFromIl2CppType(il2CppType);
-                            var genericInst = il2Cpp.MapVATR<Il2CppGenericInst>(context.class_inst);
-                            var pointers = il2Cpp.MapVATR<ulong>(genericInst.type_argv, genericInst.type_argc);
-                            var pointer = pointers[genericParameter.num];
-                            var type = il2Cpp.GetIl2CppType(pointer);
-                            return GetIl2CppStructName(type);
+                            var type = ResolveGenericParameterType(il2CppType, context.class_inst);
+                            if (type != null) return GetIl2CppStructName(type);
                         }
                         return "System_Object";
                     }
@@ -1207,12 +1244,12 @@ namespace Il2CppDumper
                     {
                         if (context != null)
                         {
-                            var genericParameter = executor.GetGenericParameteFromIl2CppType(il2CppType);
-                            var genericInst = il2Cpp.MapVATR<Il2CppGenericInst>(context.method_inst);
-                            var pointers = il2Cpp.MapVATR<ulong>(genericInst.type_argv, genericInst.type_argc);
-                            var pointer = pointers[genericParameter.num];
-                            var type = il2Cpp.GetIl2CppType(pointer);
-                            return GetIl2CppStructName(type);
+                            if (context.method_inst == 0 && context.class_inst != 0)
+                            {
+                                goto case Il2CppTypeEnum.IL2CPP_TYPE_VAR;
+                            }
+                            var type = ResolveGenericParameterType(il2CppType, context.method_inst);
+                            if (type != null) return GetIl2CppStructName(type);
                         }
                         return "System_Object";
                     }
@@ -1240,12 +1277,8 @@ namespace Il2CppDumper
                     {
                         if (context != null)
                         {
-                            var genericParameter = executor.GetGenericParameteFromIl2CppType(il2CppType);
-                            var genericInst = il2Cpp.MapVATR<Il2CppGenericInst>(context.class_inst);
-                            var pointers = il2Cpp.MapVATR<ulong>(genericInst.type_argv, genericInst.type_argc);
-                            var pointer = pointers[genericParameter.num];
-                            var type = il2Cpp.GetIl2CppType(pointer);
-                            return IsValueType(type, null);
+                            var type = ResolveGenericParameterType(il2CppType, context.class_inst);
+                            if (type != null) return IsValueType(type, null);
                         }
                         return false;
                     }
@@ -1253,12 +1286,12 @@ namespace Il2CppDumper
                     {
                         if (context != null)
                         {
-                            var genericParameter = executor.GetGenericParameteFromIl2CppType(il2CppType);
-                            var genericInst = il2Cpp.MapVATR<Il2CppGenericInst>(context.method_inst);
-                            var pointers = il2Cpp.MapVATR<ulong>(genericInst.type_argv, genericInst.type_argc);
-                            var pointer = pointers[genericParameter.num];
-                            var type = il2Cpp.GetIl2CppType(pointer);
-                            return IsValueType(type, null);
+                            if (context.method_inst == 0 && context.class_inst != 0)
+                            {
+                                goto case Il2CppTypeEnum.IL2CPP_TYPE_VAR;
+                            }
+                            var type = ResolveGenericParameterType(il2CppType, context.method_inst);
+                            if (type != null) return IsValueType(type, null);
                         }
                         return false;
                     }
@@ -1288,7 +1321,9 @@ namespace Il2CppDumper
                         var typeDef = executor.GetTypeDefinitionFromIl2CppType(il2CppType);
                         if (typeDef.IsEnum)
                         {
-                            return IsCustomType(il2Cpp.types[typeDef.elementTypeIndex], context);
+                            if (typeDef.elementTypeIndex >= 0 && typeDef.elementTypeIndex < il2Cpp.types.Length)
+                                return IsCustomType(il2Cpp.types[typeDef.elementTypeIndex], context);
+                            return false;
                         }
                         return true;
                     }
@@ -1298,7 +1333,9 @@ namespace Il2CppDumper
                         var typeDef = executor.GetGenericClassTypeDefinition(genericClass);
                         if (typeDef.IsEnum)
                         {
-                            return IsCustomType(il2Cpp.types[typeDef.elementTypeIndex], context);
+                            if (typeDef.elementTypeIndex >= 0 && typeDef.elementTypeIndex < il2Cpp.types.Length)
+                                return IsCustomType(il2Cpp.types[typeDef.elementTypeIndex], context);
+                            return false;
                         }
                         return true;
                     }
@@ -1306,12 +1343,8 @@ namespace Il2CppDumper
                     {
                         if (context != null)
                         {
-                            var genericParameter = executor.GetGenericParameteFromIl2CppType(il2CppType);
-                            var genericInst = il2Cpp.MapVATR<Il2CppGenericInst>(context.class_inst);
-                            var pointers = il2Cpp.MapVATR<ulong>(genericInst.type_argv, genericInst.type_argc);
-                            var pointer = pointers[genericParameter.num];
-                            var type = il2Cpp.GetIl2CppType(pointer);
-                            return IsCustomType(type, null);
+                            var type = ResolveGenericParameterType(il2CppType, context.class_inst);
+                            if (type != null) return IsCustomType(type, null);
                         }
                         return false;
                     }
@@ -1319,12 +1352,12 @@ namespace Il2CppDumper
                     {
                         if (context != null)
                         {
-                            var genericParameter = executor.GetGenericParameteFromIl2CppType(il2CppType);
-                            var genericInst = il2Cpp.MapVATR<Il2CppGenericInst>(context.method_inst);
-                            var pointers = il2Cpp.MapVATR<ulong>(genericInst.type_argv, genericInst.type_argc);
-                            var pointer = pointers[genericParameter.num];
-                            var type = il2Cpp.GetIl2CppType(pointer);
-                            return IsCustomType(type, null);
+                            if (context.method_inst == 0 && context.class_inst != 0)
+                            {
+                                goto case Il2CppTypeEnum.IL2CPP_TYPE_VAR;
+                            }
+                            var type = ResolveGenericParameterType(il2CppType, context.method_inst);
+                            if (type != null) return IsCustomType(type, null);
                         }
                         return false;
                     }

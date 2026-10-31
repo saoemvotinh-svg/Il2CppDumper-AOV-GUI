@@ -1,4 +1,4 @@
-﻿using Mono.Cecil;
+using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Collections.Generic;
 using System;
@@ -330,14 +330,14 @@ namespace Il2CppDumper
                         TypeReference propertyType = null;
                         MethodDefinition GetMethod = null;
                         MethodDefinition SetMethod = null;
-                        if (propertyDef.get >= 0)
+                        if (propertyDef.get >= 0 && methodDefinitionDic.TryGetValue(typeDef.methodStart + propertyDef.get, out var gm))
                         {
-                            GetMethod = methodDefinitionDic[typeDef.methodStart + propertyDef.get];
+                            GetMethod = gm;
                             propertyType = GetMethod.ReturnType;
                         }
-                        if (propertyDef.set >= 0)
+                        if (propertyDef.set >= 0 && methodDefinitionDic.TryGetValue(typeDef.methodStart + propertyDef.set, out var sm))
                         {
-                            SetMethod = methodDefinitionDic[typeDef.methodStart + propertyDef.set];
+                            SetMethod = sm;
                             propertyType ??= SetMethod.Parameters[0].ParameterType;
                         }
                         var propertyDefinition = new PropertyDefinition(propertyName, (PropertyAttributes)propertyDef.attrs, propertyType)
@@ -364,12 +364,12 @@ namespace Il2CppDumper
                         var eventType = il2Cpp.types[eventDef.typeIndex];
                         var eventTypeRef = GetTypeReference(typeDefinition, eventType);
                         var eventDefinition = new EventDefinition(eventName, (EventAttributes)eventType.attrs, eventTypeRef);
-                        if (eventDef.add >= 0)
-                            eventDefinition.AddMethod = methodDefinitionDic[typeDef.methodStart + eventDef.add];
-                        if (eventDef.remove >= 0)
-                            eventDefinition.RemoveMethod = methodDefinitionDic[typeDef.methodStart + eventDef.remove];
-                        if (eventDef.raise >= 0)
-                            eventDefinition.InvokeMethod = methodDefinitionDic[typeDef.methodStart + eventDef.raise];
+                        if (eventDef.add >= 0 && methodDefinitionDic.TryGetValue(typeDef.methodStart + eventDef.add, out var am))
+                            eventDefinition.AddMethod = am;
+                        if (eventDef.remove >= 0 && methodDefinitionDic.TryGetValue(typeDef.methodStart + eventDef.remove, out var rm))
+                            eventDefinition.RemoveMethod = rm;
+                        if (eventDef.raise >= 0 && methodDefinitionDic.TryGetValue(typeDef.methodStart + eventDef.raise, out var im))
+                            eventDefinition.InvokeMethod = im;
                         typeDefinition.Events.Add(eventDefinition);
                         eventDefinitionDic.Add(i, eventDefinition);
 
@@ -506,8 +506,11 @@ namespace Il2CppDumper
                 case Il2CppTypeEnum.IL2CPP_TYPE_VALUETYPE:
                     {
                         var typeDef = executor.GetTypeDefinitionFromIl2CppType(il2CppType);
-                        var typeDefinition = typeDefinitionDic[typeDef];
-                        return moduleDefinition.ImportReference(typeDefinition);
+                        if (typeDef != null && typeDefinitionDic.TryGetValue(typeDef, out var typeDefinition))
+                        {
+                            return moduleDefinition.ImportReference(typeDefinition);
+                        }
+                        return moduleDefinition.ImportReference(typeSystem.Object);
                     }
                 case Il2CppTypeEnum.IL2CPP_TYPE_ARRAY:
                     {
@@ -519,16 +522,25 @@ namespace Il2CppDumper
                     {
                         var genericClass = il2Cpp.MapVATR<Il2CppGenericClass>(il2CppType.data.generic_class);
                         var typeDef = executor.GetGenericClassTypeDefinition(genericClass);
-                        var typeDefinition = typeDefinitionDic[typeDef];
-                        var genericInstanceType = new GenericInstanceType(moduleDefinition.ImportReference(typeDefinition));
-                        var genericInst = il2Cpp.MapVATR<Il2CppGenericInst>(genericClass.context.class_inst);
-                        var pointers = il2Cpp.MapVATR<ulong>(genericInst.type_argv, genericInst.type_argc);
-                        foreach (var pointer in pointers)
+                        if (typeDef != null && typeDefinitionDic.TryGetValue(typeDef, out var typeDefinition))
                         {
-                            var oriType = il2Cpp.GetIl2CppType(pointer);
-                            genericInstanceType.GenericArguments.Add(GetTypeReference(memberReference, oriType));
+                            var genericInstanceType = new GenericInstanceType(moduleDefinition.ImportReference(typeDefinition));
+                            if (genericClass.context.class_inst != 0)
+                            {
+                                var genericInst = il2Cpp.MapVATR<Il2CppGenericInst>(genericClass.context.class_inst);
+                                if (genericInst.type_argc > 0 && genericInst.type_argv != 0)
+                                {
+                                    var pointers = il2Cpp.MapVATR<ulong>(genericInst.type_argv, genericInst.type_argc);
+                                    foreach (var pointer in pointers)
+                                    {
+                                        var oriType = il2Cpp.GetIl2CppType(pointer);
+                                        genericInstanceType.GenericArguments.Add(GetTypeReference(memberReference, oriType));
+                                    }
+                                }
+                            }
+                            return genericInstanceType;
                         }
-                        return genericInstanceType;
+                        return moduleDefinition.ImportReference(typeSystem.Object);
                     }
                 case Il2CppTypeEnum.IL2CPP_TYPE_SZARRAY:
                     {

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -142,11 +142,13 @@ namespace Il2CppDumper
                     {
                         if (Version >= 29)
                         {
-                            dic.Add(attributeDataRanges[i].token, i);
+                            if (attributeDataRanges != null && i < attributeDataRanges.Length)
+                                dic[attributeDataRanges[i].token] = i;
                         }
                         else
                         {
-                            dic.Add(attributeTypeRanges[i].token, i);
+                            if (attributeTypeRanges != null && i < attributeTypeRanges.Length)
+                                dic[attributeTypeRanges[i].token] = i;
                         }
                     }
                 }

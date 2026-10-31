@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -197,7 +197,7 @@ namespace Il2CppDumper
             {
                 types[i] = MapVATR<Il2CppType>(pTypes[i]);
                 types[i].Init(Version);
-                typeDic.Add(pTypes[i], types[i]);
+                typeDic[pTypes[i]] = types[i];
             }
             if (Version >= 24.2)
             {
@@ -205,11 +205,20 @@ namespace Il2CppDumper
                 codeGenModules = new Dictionary<string, Il2CppCodeGenModule>(pCodeGenModules.Length, StringComparer.Ordinal);
                 codeGenModuleMethodPointers = new Dictionary<string, ulong[]>(pCodeGenModules.Length, StringComparer.Ordinal);
                 rgctxsDictionary = new Dictionary<string, Dictionary<uint, Il2CppRGCTXDefinition[]>>(pCodeGenModules.Length, StringComparer.Ordinal);
-                foreach (var pCodeGenModule in pCodeGenModules)
+                for (var i = 0; i < pCodeGenModules.Length; ++i)
                 {
+                    var pCodeGenModule = pCodeGenModules[i];
                     var codeGenModule = MapVATR<Il2CppCodeGenModule>(pCodeGenModule);
                     var moduleName = ReadStringToNull(MapVATR(codeGenModule.moduleName));
-                    codeGenModules.Add(moduleName, codeGenModule);
+                    if (string.IsNullOrEmpty(moduleName))
+                    {
+                        moduleName = $"UnknownModule_{i}";
+                    }
+                    if (codeGenModules.ContainsKey(moduleName))
+                    {
+                        moduleName = $"{moduleName}_{i}";
+                    }
+                    codeGenModules[moduleName] = codeGenModule;
                     ulong[] methodPointers;
                     try
                     {
@@ -219,19 +228,30 @@ namespace Il2CppDumper
                     {
                         methodPointers = new ulong[codeGenModule.methodPointerCount];
                     }
-                    codeGenModuleMethodPointers.Add(moduleName, methodPointers);
+                    codeGenModuleMethodPointers[moduleName] = methodPointers;
 
                     var rgctxsDefDictionary = new Dictionary<uint, Il2CppRGCTXDefinition[]>();
-                    rgctxsDictionary.Add(moduleName, rgctxsDefDictionary);
+                    rgctxsDictionary[moduleName] = rgctxsDefDictionary;
                     if (codeGenModule.rgctxsCount > 0)
                     {
-                        var rgctxs = MapVATR<Il2CppRGCTXDefinition>(codeGenModule.rgctxs, codeGenModule.rgctxsCount);
-                        var rgctxRanges = MapVATR<Il2CppTokenRangePair>(codeGenModule.rgctxRanges, codeGenModule.rgctxRangesCount);
-                        foreach (var rgctxRange in rgctxRanges)
+                        try
                         {
-                            var rgctxDefs = new Il2CppRGCTXDefinition[rgctxRange.range.length];
-                            Array.Copy(rgctxs, rgctxRange.range.start, rgctxDefs, 0, rgctxRange.range.length);
-                            rgctxsDefDictionary.Add(rgctxRange.token, rgctxDefs);
+                            var rgctxs = MapVATR<Il2CppRGCTXDefinition>(codeGenModule.rgctxs, codeGenModule.rgctxsCount);
+                            var rgctxRanges = MapVATR<Il2CppTokenRangePair>(codeGenModule.rgctxRanges, codeGenModule.rgctxRangesCount);
+                            foreach (var rgctxRange in rgctxRanges)
+                            {
+                                if (rgctxRange.range.start >= 0 && rgctxRange.range.length > 0 &&
+                                    (long)rgctxRange.range.start + (long)rgctxRange.range.length <= (long)rgctxs.Length)
+                                {
+                                    var rgctxDefs = new Il2CppRGCTXDefinition[rgctxRange.range.length];
+                                    Array.Copy(rgctxs, rgctxRange.range.start, rgctxDefs, 0, rgctxRange.range.length);
+                                    rgctxsDefDictionary[rgctxRange.token] = rgctxDefs;
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"WARNING: RGCTX skipped for {moduleName}: {ex.Message}");
                         }
                     }
                 }
@@ -240,19 +260,32 @@ namespace Il2CppDumper
             {
                 methodPointers = MapVATR<ulong>(pCodeRegistration.methodPointers, pCodeRegistration.methodPointersCount);
             }
-            genericMethodTable = MapVATR<Il2CppGenericMethodFunctionsDefinitions>(pMetadataRegistration.genericMethodTable, pMetadataRegistration.genericMethodTableCount);
-            methodSpecs = MapVATR<Il2CppMethodSpec>(pMetadataRegistration.methodSpecs, pMetadataRegistration.methodSpecsCount);
-            foreach (var table in genericMethodTable)
+            try
             {
-                var methodSpec = methodSpecs[table.genericMethodIndex];
-                var methodDefinitionIndex = methodSpec.methodDefinitionIndex;
-                if (!methodDefinitionMethodSpecs.TryGetValue(methodDefinitionIndex, out var list))
+                genericMethodTable = MapVATR<Il2CppGenericMethodFunctionsDefinitions>(pMetadataRegistration.genericMethodTable, pMetadataRegistration.genericMethodTableCount);
+                methodSpecs = MapVATR<Il2CppMethodSpec>(pMetadataRegistration.methodSpecs, pMetadataRegistration.methodSpecsCount);
+                foreach (var table in genericMethodTable)
                 {
-                    list = new List<Il2CppMethodSpec>();
-                    methodDefinitionMethodSpecs.Add(methodDefinitionIndex, list);
+                    if (table.genericMethodIndex >= 0 && table.genericMethodIndex < methodSpecs.Length)
+                    {
+                        var methodSpec = methodSpecs[table.genericMethodIndex];
+                        var methodDefinitionIndex = methodSpec.methodDefinitionIndex;
+                        if (!methodDefinitionMethodSpecs.TryGetValue(methodDefinitionIndex, out var list))
+                        {
+                            list = new List<Il2CppMethodSpec>();
+                            methodDefinitionMethodSpecs.Add(methodDefinitionIndex, list);
+                        }
+                        list.Add(methodSpec);
+                        if (table.indices.methodIndex >= 0 && table.indices.methodIndex < genericMethodPointers.Length)
+                        {
+                            methodSpecGenericMethodPointers[methodSpec] = genericMethodPointers[table.indices.methodIndex];
+                        }
+                    }
                 }
-                list.Add(methodSpec);
-                methodSpecGenericMethodPointers.Add(methodSpec, genericMethodPointers[table.indices.methodIndex]);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"WARNING: genericMethodTable parsing error: {ex.Message}");
             }
         }
 
@@ -278,16 +311,32 @@ namespace Il2CppDumper
                 var offset = -1;
                 if (fieldOffsetsArePointers)
                 {
-                    var ptr = fieldOffsets[typeIndex];
-                    if (ptr > 0)
+                    if (fieldOffsets != null && typeIndex >= 0 && typeIndex < fieldOffsets.Length)
                     {
-                        Position = MapVATR(ptr) + 4ul * (ulong)fieldIndexInType;
-                        offset = ReadInt32();
+                        var ptr = fieldOffsets[typeIndex];
+                        if (ptr > 0)
+                        {
+                            Position = MapVATR(ptr) + 4ul * (ulong)fieldIndexInType;
+                            offset = ReadInt32();
+                            // De-obfuscate Tencent 0x69696969 XOR mask
+                            if ((offset & 0xFFFFFF00) == 0x69696900 || (offset & 0xFFFF0000) == 0x69690000)
+                            {
+                                offset ^= 0x69696969;
+                            }
+                        }
                     }
                 }
                 else
                 {
-                    offset = (int)fieldOffsets[fieldIndex];
+                    if (fieldOffsets != null && fieldIndex >= 0 && fieldIndex < fieldOffsets.Length)
+                    {
+                        offset = (int)fieldOffsets[fieldIndex];
+                        // De-obfuscate Tencent 0x69696969 XOR mask
+                        if ((offset & 0xFFFFFF00) == 0x69696900 || (offset & 0xFFFF0000) == 0x69690000)
+                        {
+                            offset ^= 0x69696969;
+                        }
+                    }
                 }
                 if (offset > 0)
                 {
@@ -325,14 +374,20 @@ namespace Il2CppDumper
             if (Version >= 24.2)
             {
                 var methodToken = methodDef.token;
-                var ptrs = codeGenModuleMethodPointers[imageName];
-                var methodPointerIndex = methodToken & 0x00FFFFFFu;
-                return ptrs[methodPointerIndex - 1];
+                if (imageName != null && codeGenModuleMethodPointers.TryGetValue(imageName, out var ptrs) && ptrs != null)
+                {
+                    var methodPointerIndex = methodToken & 0x00FFFFFFu;
+                    if (methodPointerIndex > 0 && methodPointerIndex <= (uint)ptrs.Length)
+                    {
+                        return ptrs[methodPointerIndex - 1];
+                    }
+                }
+                return 0;
             }
             else
             {
                 var methodIndex = methodDef.methodIndex;
-                if (methodIndex >= 0)
+                if (methodIndex >= 0 && methodPointers != null && methodIndex < methodPointers.Length)
                 {
                     return methodPointers[methodIndex];
                 }
