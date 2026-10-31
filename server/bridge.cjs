@@ -958,16 +958,23 @@ function createBridgeApp() {
   app.get('/api/fix-metadata/defaults', (req, res) => {
     const ws = resolveWorkspaceDefaults();
     
-    // Candidates for metadata
-    const metaCandidates = [
-      'c:\\Users\\hung\\Desktop\\REATEST\\analysis-output\\decompiled\\payload\\device-unpack\\176857764\\Managed\\Metadata\\global-metadata.dat',
-      ws.metadataPath,
-      path.join(ws.workspaceDir, 'global-metadata.dat'),
-      path.join(ws.workspaceDir, 'input', 'global-metadata.dat')
-    ];
-    let defaultMeta = metaCandidates.find(p => p && fs.existsSync(p)) || metaCandidates[0];
+    // Ensure Managed folder exists in workspace
+    const managedDir = path.join(ws.workspaceDir, 'Managed');
+    if (!fs.existsSync(managedDir)) {
+      try { fs.mkdirSync(managedDir, { recursive: true }); } catch {}
+    }
 
-    // Candidates for memory dump (.bin or .dat)
+    // 1. Target metadata candidates: strictly prioritize workspace/Managed/
+    const metaCandidates = [
+      path.join(ws.workspaceDir, 'Managed', 'global-metadata.dat'),
+      path.join(ws.workspaceDir, 'Managed', 'Metadata', 'global-metadata.dat'),
+      path.join(ws.workspaceDir, 'global-metadata.dat'),
+      'c:\\Users\\hung\\Desktop\\REATEST\\analysis-output\\decompiled\\payload\\device-unpack\\176857764\\Managed\\Metadata\\global-metadata.dat',
+      ws.metadataPath
+    ];
+    let defaultMeta = metaCandidates.find(p => p && fs.existsSync(p)) || path.join(ws.workspaceDir, 'Managed', 'global-metadata.dat');
+
+    // 2. Candidates for memory dump (.bin or .dat)
     let defaultDump = path.join(ws.workspaceDir, 'com.garena.game.kgvn-memory.bin');
     if (!fs.existsSync(defaultDump)) {
       try {
@@ -977,17 +984,16 @@ function createBridgeApp() {
       } catch {}
     }
 
-    // Default output path
-    const defaultOutput = defaultMeta
-      ? path.join(path.dirname(defaultMeta), 'global-metadata-fixed.dat')
-      : path.join(ws.workspaceDir, 'global-metadata-fixed.dat');
+    // 3. Default output path: strictly in workspace/ as requested!
+    const defaultOutput = path.join(ws.workspaceDir, 'global-metadata-fixed.dat');
 
     res.json({
       metadataPath: defaultMeta,
       metadataExists: fs.existsSync(defaultMeta),
       dumpPath: defaultDump,
       dumpExists: fs.existsSync(defaultDump),
-      outputPath: defaultOutput
+      outputPath: defaultOutput,
+      workspaceDir: ws.workspaceDir
     });
   });
 

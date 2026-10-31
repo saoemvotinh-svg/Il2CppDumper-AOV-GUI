@@ -7,6 +7,7 @@ import {
   Check,
   Copy,
   FolderOpen,
+  Folder,
   ArrowRight,
   ShieldCheck,
   Sparkles,
@@ -78,15 +79,13 @@ export const MetadataFixer: React.FC<MetadataFixerProps> = ({
   };
 
   // Browse File Handler
-  const handleBrowseFile = async (target: 'dump' | 'meta' | 'out') => {
+  const handleBrowseFile = async (target: 'dump' | 'meta') => {
     try {
       if (window.electronAPI) {
         const title =
           target === 'dump'
             ? 'Select Memory Dump File (*.bin, *.dat)'
-            : target === 'meta'
-            ? 'Select Corrupted Target global-metadata.dat'
-            : 'Select Destination Fixed Metadata File';
+            : 'Select Target global-metadata.dat';
         const filter =
           target === 'dump'
             ? [{ name: 'Memory Dump (*.bin, *.dat)', extensions: ['bin', 'dat', 'raw', 'dump'] }, { name: 'All Files', extensions: ['*'] }]
@@ -97,23 +96,17 @@ export const MetadataFixer: React.FC<MetadataFixerProps> = ({
           if (target === 'dump') {
             setDumpPath(result.selectedPath);
             scanDumpFile(result.selectedPath);
-          } else if (target === 'meta') {
-            setMetadataPath(result.selectedPath);
-            if (!outputPath) {
-              setOutputPath(result.selectedPath.replace(/\.dat$/i, '-fixed.dat'));
-            }
           } else {
-            setOutputPath(result.selectedPath);
+            setMetadataPath(result.selectedPath);
           }
         }
       } else {
         const isDump = target === 'dump';
-        const isMeta = target === 'meta';
         const res = await fetch(apiUrl('/api/browse-file'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            title: isDump ? 'Select Memory Dump File (*.bin, *.dat)' : 'Select Metadata File (*.dat)',
+            title: isDump ? 'Select Memory Dump File (*.bin, *.dat)' : 'Select Target Metadata File (*.dat)',
             extensions: isDump ? ['bin', 'dat', 'raw', 'dump'] : ['dat', 'bin']
           })
         });
@@ -122,18 +115,47 @@ export const MetadataFixer: React.FC<MetadataFixerProps> = ({
           if (isDump) {
             setDumpPath(data.path);
             scanDumpFile(data.path);
-          } else if (isMeta) {
-            setMetadataPath(data.path);
-            if (!outputPath) {
-              setOutputPath(data.path.replace(/\.dat$/i, '-fixed.dat'));
-            }
           } else {
-            setOutputPath(data.path);
+            setMetadataPath(data.path);
           }
         }
       }
     } catch (err) {
       console.error('File browsing failed:', err);
+    }
+  };
+
+  // Browse Output Folder (Selects folder, then automatically appends global-metadata-fixed.dat)
+  const handleBrowseOutputFolder = async () => {
+    try {
+      if (window.electronAPI) {
+        const result = await window.electronAPI.browseFolder({
+          title: 'Chọn Thư Mục Lưu File Metadata Đã Sửa (Tự động thêm \\global-metadata-fixed.dat)'
+        });
+        if (result.selectedPath) {
+          const sep = result.selectedPath.includes('/') ? '/' : '\\';
+          const cleanDir = result.selectedPath.replace(/[/\\]+$/, '');
+          setOutputPath(`${cleanDir}${sep}global-metadata-fixed.dat`);
+        }
+      } else {
+        const initialDir = outputPath ? outputPath.replace(/[/\\][^/\\]+$/, '') : '';
+        const res = await fetch(apiUrl('/api/browse-folder'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: 'Chọn Thư Mục Lưu File Metadata Đã Sửa',
+            initialDir
+          })
+        });
+        const data = await res.json();
+        if (data.selectedPath) {
+          const sep = data.selectedPath.includes('/') ? '/' : '\\';
+          const cleanDir = data.selectedPath.replace(/[/\\]+$/, '');
+          setOutputPath(`${cleanDir}${sep}global-metadata-fixed.dat`);
+        }
+      }
+    } catch (err) {
+      console.error('Folder browsing failed:', err);
     }
   };
 
@@ -362,12 +384,7 @@ export const MetadataFixer: React.FC<MetadataFixerProps> = ({
               <input
                 type="text"
                 value={metadataPath}
-                onChange={(e) => {
-                  setMetadataPath(e.target.value);
-                  if (!outputPath && e.target.value) {
-                    setOutputPath(e.target.value.replace(/\.dat$/i, '-fixed.dat'));
-                  }
-                }}
+                onChange={(e) => setMetadataPath(e.target.value)}
                 placeholder="Chọn file global-metadata.dat trên đĩa..."
                 className="control-input flex-1 px-3 py-1.5 text-xs font-mono"
               />
@@ -379,6 +396,9 @@ export const MetadataFixer: React.FC<MetadataFixerProps> = ({
                 <FolderOpen className="w-3.5 h-3.5 text-amber-400" />
                 <span>Chọn File...</span>
               </button>
+            </div>
+            <div className="text-[11px] text-ink-muted">
+              Mặc định trong thư mục: <code className="text-amber-400 font-mono">workspace\Managed\global-metadata.dat</code>
             </div>
           </div>
 
@@ -408,12 +428,16 @@ export const MetadataFixer: React.FC<MetadataFixerProps> = ({
               />
               <button
                 type="button"
-                onClick={() => handleBrowseFile('out')}
+                onClick={handleBrowseOutputFolder}
                 className="btn-secondary-action px-3 py-1.5 text-xs flex items-center gap-1.5 cursor-pointer font-medium whitespace-nowrap"
+                title="Chọn thư mục lưu file (tự động gắn \global-metadata-fixed.dat)"
               >
-                <FolderOpen className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Duyệt...</span>
+                <Folder className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Chọn Thư Mục...</span>
               </button>
+            </div>
+            <div className="text-[11px] text-ink-muted">
+              Chọn thư mục lưu (mặc định trong <code className="text-emerald-400 font-mono">workspace\</code>), công cụ sẽ tự động thêm <code className="text-emerald-400 font-mono">\global-metadata-fixed.dat</code> vào phía sau.
             </div>
           </div>
 
