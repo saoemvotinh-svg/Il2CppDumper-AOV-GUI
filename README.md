@@ -14,15 +14,16 @@ Kho mã nguồn hợp nhất toàn diện bao gồm **C# .NET 8 Core Engine** v�
 
 ## 📑 Mục lục
 1. [Tính năng nổi bật (Key Features)](#-tính-năng-nổi-bật-key-features)
-2. [Tải về bản cài đặt (Quick Download v6.8.0)](#-tải-về-bản-cài-đặt-quick-download-v680)
-3. [Cấu trúc thư mục dự án](#-cấu-trúc-thư-mục-dự-án-unified-structure)
-4. [Hướng dẫn sử dụng chi tiết](#-hướng-dẫn-sử-dụng-chi-tiết)
+2. [Giao diện ứng dụng (Workstation Screenshots)](#-giao-diện-ứng-dụng-workstation-screenshots)
+3. [Tải về bản cài đặt (Quick Download v6.8.0)](#-tải-về-bản-cài-đặt-quick-download-v680)
+4. [Cấu trúc thư mục dự án](#-cấu-trúc-thư-mục-dự-án-unified-structure)
+5. [Hướng dẫn sử dụng chi tiết](#-hướng-dẫn-sử-dụng-chi-tiết)
    - [Quy trình 1: Phân tích & Decompile thông thường](#quy-trình-1-phân-tích--decompile-thông-thường)
    - [Quy trình 2: Khôi phục Header Metadata bằng Tab "Fix Metadata"](#quy-trình-2-khôi-phục-header-metadata-bằng-tab-fix-metadata)
    - [Quy trình 3: Map Tên Hàm & Struct vào IDA Pro (Khuyên dùng Tối thượng ⭐⭐⭐)](#quy-trình-3-map-tên-hàm--struct-vào-ida-pro-khuyên-dùng-tối-thượng-)
-5. [So sánh chất lượng Decompile trong IDA Pro](#-so-sánh-chất-lượng-decompile-trong-ida-pro)
-6. [Hướng dẫn biên dịch từ Source (Build from Source)](#-hướng-dẫn-biên-dịch-từ-source-build-from-source)
-7. [Tuyên bố miễn trừ trách nhiệm (Disclaimer)](#-tuyên-bố-miễn-trừ-trách-nhiệm-disclaimer)
+6. [So sánh chất lượng Decompile trong IDA Pro](#-so-sánh-chất-lượng-decompile-trong-ida-pro)
+7. [Hướng dẫn biên dịch từ Source (Build from Source)](#-hướng-dẫn-biên-dịch-từ-source-build-from-source)
+8. [Tuyên bố miễn trừ trách nhiệm (Disclaimer)](#-tuyên-bố-miễn-trừ-trách-nhiệm-disclaimer)
 
 ---
 
@@ -73,6 +74,22 @@ Kho mã nguồn hợp nhất toàn diện bao gồm **C# .NET 8 Core Engine** v�
 
 ---
 
+---
+
+## 📸 Giao diện ứng dụng (Workstation Screenshots)
+
+### 1. Tab `>_ Execution Pipeline` (Decompile & Real-time Diagnostic Console)
+> Trung tâm điều khiển nạp file ELF & Metadata, thiết lập tùy chọn decompile nâng cao và theo dõi luồng giải mã Tencent XOR thời gian thực.
+![Execution Pipeline](docs/images/tab1_pipeline.png)
+
+### 2. Tab `Artifact Explorer` (Deep Symbol Query & IDA Pro Scripts)
+> Tra cứu sâu hơn 1.7M dòng biểu tượng, xem cây quan hệ kế thừa Class/Field/Method, duyệt 88+ DLL Assemblies và nạp bộ script IDA Pro tối thượng (`ida_ultimate_il2cpp.py`).
+![Artifact Explorer](docs/images/tab2_artifacts.png)
+
+### 3. Tab `Fix Metadata` (Memory Dump Scanner & EA → FA Auto-Patch)
+> Tự động quét file dump bộ nhớ `*.bin`/`*.dat`, khôi phục cấu trúc header gốc, tự động vá magic Tencent `0xEAB11BAF` thành `0xFAB11BAF` cho Version 29 và kiểm tra trực quan bảng so sánh mã Hex.
+![Fix Metadata](docs/images/tab3_fix_metadata.png)
+
 ## 🚀 Tải về bản cài đặt (Quick Download v6.8.0)
 
 Người dùng không cần cài đặt môi trường lập trình có thể tải trực tiếp bản đóng gói sẵn chính thức:
@@ -90,6 +107,12 @@ Người dùng không cần cài đặt môi trường lập trình có thể t�
 
 ```text
 Il2CppDumper-AOV-GUI/
+├── docs/                     # Tài liệu & hình ảnh chụp giao diện
+│   └── images/               # Ảnh chụp trực quan 3 tab chức năng của Workstation
+│       ├── tab1_pipeline.png
+│       ├── tab2_artifacts.png
+│       └── tab3_fix_metadata.png
+│
 ├── engine/                   # Toàn bộ mã nguồn C# .NET 8 Core Engine
 │   ├── Il2CppDumper.sln      # Solution .NET 8 / Visual Studio
 │   └── Il2CppDumper/         # Mã nguồn chính của dumper

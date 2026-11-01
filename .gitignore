@@ -52,6 +52,8 @@ Thumbs.db
 # Screenshots & Local Test Outputs
 *.png
 *.jpg
+!docs/images/*.png
+!docs/images/*.jpg
 test_output/
 
 # Linter
