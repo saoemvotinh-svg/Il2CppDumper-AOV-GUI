@@ -270,6 +270,7 @@ function createBridgeApp() {
   function copyScriptsToOutput(targetDir) {
     if (!fs.existsSync(targetDir)) return;
     const scriptFiles = [
+      'ida_ultimate_il2cpp.py',
       'ida_with_struct_py3.py',
       'ida_py3.py',
       'ida.py',

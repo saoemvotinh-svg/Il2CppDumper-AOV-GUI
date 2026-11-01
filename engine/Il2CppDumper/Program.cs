@@ -303,6 +303,7 @@ namespace Il2CppDumper
                     "ida.py",
                     "ida_py3.py",
                     "ida_with_struct.py",
+                    "ida_ultimate_il2cpp.py",
                     "ida_with_struct_py3.py",
                     "ghidra.py",
                     "ghidra_wasm.py",

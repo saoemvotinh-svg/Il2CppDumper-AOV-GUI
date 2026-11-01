@@ -50,7 +50,13 @@ Kho mã nguồn hợp nhất toàn diện bao gồm **C# .NET 8 Core Engine** v�
 - **Sao chép 1-Click & Universal Text Selection:** Cho phép bôi đen chọn văn bản và bấm copy nhanh mọi loại địa chỉ, tên hàm, chữ ký ở mọi vị trí trên giao diện.
 
 ### 4. 💻 Tự động xuất bộ Script Map cho IDA Pro & Ghidra
-- **`ida_with_struct_py3.py` (Khuyên dùng ⭐ cho IDA Pro 7.x, 8.x, 9.x):**
+- **`ida_ultimate_il2cpp.py` (Khuyên dùng tối thượng ⭐⭐⭐ cho IDA Pro 7.x, 8.x, 9.x):**
+  - **Đỉnh cao Decompiler:** Phân tích `il2cpp.h` theo cơ chế Fault-Tolerant Header Chunker độc lập (không bao giờ văng IDA khi file .h quá lớn).
+  - **Deep Call-Site String Inlining:** Quét mọi Xrefs trỏ tới String literal và chèn comment trực tiếp vào từng dòng lệnh gọi trong code ASM và cửa sổ F5 Decompile.
+  - **Auto-Cast `this` & Field Resolver:** Tự động nhận diện và gán kiểu Struct cho tham số `this` (param 0), biến các lệnh offset thô `*(a1 + 0x18)` thành mã giả C# sạch sẽ `this->fields.m_isVisible`.
+  - **Metadata TypeInfo Resolver & Clean CTree:** Tự động giải mã TypeInfo cho các đối tượng mới tạo và lọc dọn tham số rác `const MethodInfo* method`.
+- **`ida_with_struct_py3.py` (Tiêu chuẩn ⭐):**
+  - Đọc trực tiếp `script.json` và nạp toàn bộ cấu trúc C struct từ `il2cpp.h` vào IDA Type Engine (`parse_decls`).
   - Đọc trực tiếp `script.json` và nạp toàn bộ cấu trúc C struct từ `il2cpp.h` vào IDA Type Engine (`parse_decls`).
   - Tự động nhận diện file `script.json` và `il2cpp.h` ở cùng thư mục, không hiện popup hỏi file phiền phức.
   - Ép kiểu hàm (`apply_type`), map tên hàm, kiểu tham số, con trỏ và string literals vào `libil2cpp.so` chỉ trong vài giây.
@@ -173,7 +179,7 @@ Sau khi decompile xong, để `libil2cpp.so` trong IDA Pro hiển thị đầy �
 1. **Mở file `libil2cpp.so` trong IDA Pro** (chọn đúng bản IDA 64-bit hoặc 32-bit tương ứng với file binary).
 2. **Chờ IDA hoàn tất phân tích ban đầu** (nhìn góc dưới cùng bên trái màn hình IDA hiển thị trạng thái `AU: idle`).
 3. **Nhấn tổ hợp phím `Alt + F7`** (hoặc vào menu `File` -> `Script file...`).
-4. **Chọn file `ida_with_struct_py3.py`** trong thư mục output (bạn có thể bấm nút **"Copy Script Path"** trong tab Artifact Explorer của Studio để dán đường dẫn).
+4. **Chọn file `ida_ultimate_il2cpp.py` (Tối thượng ⭐⭐⭐)** hoặc `ida_with_struct_py3.py` trong thư mục output (bạn có thể bấm nút **"Copy Script Path"** trong tab Artifact Explorer của Studio để dán đường dẫn).
 5. **Xem kết quả:**
    - Script tự động tìm `script.json` và `il2cpp.h` cùng thư mục mà không cần popup chọn file.
    - Console IDA sẽ in log tiến trình:

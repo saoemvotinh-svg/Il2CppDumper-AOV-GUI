@@ -636,21 +636,29 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
                 Nhấn tổ hợp phím <kbd className="px-1.5 py-0.5 rounded bg-app-elevated border border-app-border text-ink-primary font-bold">Alt + F7</kbd> (hoặc vào menu <code className="text-ink-primary">File -&gt; Script file...</code>).
               </li>
               <li>
-                Chọn file <span className="text-accent font-bold">ida_with_struct_py3.py</span> trong thư mục output bên dưới. Script sẽ tự động nhận diện <code className="text-ink-primary">script.json</code> & <code className="text-ink-primary">il2cpp.h</code> cùng thư mục, tự động map toàn bộ hàng chục ngàn tên hàm, tham số và struct vào IDA!
+                Chọn file <span className="text-accent font-bold">ida_ultimate_il2cpp.py</span> (Tối thượng ⭐⭐⭐) hoặc <code className="text-ink-primary">ida_with_struct_py3.py</code> trong thư mục output bên dưới. Script sẽ tự động nhận diện <code className="text-ink-primary">script.json</code> & <code className="text-ink-primary">il2cpp.h</code>, tự động nạp struct, map tên hàm, gán kiểu this và inline toàn bộ String Xrefs!
               </li>
             </ol>
           </div>
 
           {/* Script Cards Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {[
+              {
+                fileName: 'ida_ultimate_il2cpp.py',
+                title: 'IDA Pro Ultimate Engine (Tối thượng ⭐⭐⭐)',
+                desc: 'Đỉnh cao Decompiler: Fault-Tolerant Header Chunker, tự inline String Xrefs vào câu lệnh F5, Auto-Cast con trỏ this sang struct & lọc tham số rác MethodInfo.',
+                tag: 'Python 3 / IDA 7.x-9.x',
+                badge: 'Supreme ⚡',
+                isHot: true,
+              },
               {
                 fileName: 'ida_with_struct_py3.py',
                 title: 'IDA Pro with Structs (Khuyên dùng ⭐)',
                 desc: 'Đọc script.json & nạp il2cpp.h vào IDA Type Engine. Tự động đổi tên toàn bộ hàm, ép kiểu tham số, gán struct và string literals.',
                 tag: 'Python 3 / IDA 7.x-9.x',
                 badge: 'Recommended ⭐',
-                isHot: true,
+                isHot: false,
               },
               {
                 fileName: 'ida_py3.py',
