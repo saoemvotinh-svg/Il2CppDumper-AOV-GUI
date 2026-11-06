@@ -616,15 +616,7 @@ function createBridgeApp() {
 
       const dumpV2Stat = hasDumpV2 ? fs.statSync(path.join(targetDir, 'dumpv2.cs')) : null;
 
-      // Auto pre-warm index in background
-
-      const targetDump = hasDumpV2 ? path.join(targetDir, 'dumpv2.cs') : path.join(targetDir, 'dump.cs');
-
-      if (fs.existsSync(targetDump) && !dumpRegistryMap.has(targetDump) && !dumpRegistryPromises.has(targetDump)) {
-
-        getOrBuildDumpRegistry(targetDump).catch(err => console.error('Background indexing error:', err));
-
-      }
+      // Auto pre-warm index removed - indexing is now triggered on demand (active only)
 
       res.json({
 
@@ -681,6 +673,37 @@ function createBridgeApp() {
     tookMs: 0
 
   };
+
+    // On-demand in-memory index activation (triggered ONLY when user clicks Active)
+  app.post('/api/activate-indexing', async (req, res) => {
+    const ws = resolveWorkspaceDefaults();
+    const { dir = ws.outputDir, source, force = false } = req.body || {};
+    const hasV2 = fs.existsSync(path.join(dir, 'dumpv2.cs'));
+    const targetName = source || (hasV2 ? 'dumpv2.cs' : 'dump.cs');
+    const targetDump = path.join(dir, targetName);
+
+    if (!fs.existsSync(targetDump)) {
+      return res.status(404).json({ error: `${targetName} not found in ${dir}` });
+    }
+
+    if (force) {
+      dumpRegistryMap.delete(targetDump);
+      dumpRegistryPromises.delete(targetDump);
+      indexingStatus.phase = 'idle';
+      indexingStatus.percent = 0;
+      indexingStatus.methodsCount = 0;
+    }
+
+    if (!dumpRegistryMap.has(targetDump) && !dumpRegistryPromises.has(targetDump)) {
+      getOrBuildDumpRegistry(targetDump).catch(err => console.error('On-demand indexing error:', err));
+    }
+
+    res.json({
+      success: true,
+      targetFile: targetName,
+      status: indexingStatus
+    });
+  });
 
   app.get('/api/indexing-status', (req, res) => {
 

@@ -19,7 +19,7 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="border-b border-[#2C3236] bg-[#141618] select-none shrink-0 z-30">
       {/* Unified Single Title Bar with Window Drag & Native Overlay Support */}
-      <div className="titlebar-drag flex items-center justify-between h-9 px-3">
+      <div className="titlebar-drag flex items-center justify-between h-10 px-3">
         {/* Left: App Identity & Architecture Telemetry */}
         <div className="flex items-center gap-2.5 titlebar-no-drag">
           <div className="w-5 h-5 rounded bg-[#1F2326] border border-[#2C3236] flex items-center justify-center text-accent">
@@ -96,7 +96,7 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Right: Reserved space for Windows TitleBarOverlay native caption buttons */}
         <div className="titlebar-no-drag shrink-0 flex items-center justify-end">
           {isElectron ? (
-            <div className="w-[138px] h-9" />
+            <div className="w-[140px] h-10" />
           ) : (
             <div className="text-[11px] font-mono text-[#676E6A]">
               <span>Desktop Bridge Active</span>

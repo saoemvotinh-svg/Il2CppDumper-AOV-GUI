@@ -29,7 +29,7 @@ function createWindow(port) {
     titleBarOverlay: {
       color: '#141618',
       symbolColor: '#9FA6A2',
-      height: 36
+      height: 40
     },
     show: false,
     autoHideMenuBar: true,

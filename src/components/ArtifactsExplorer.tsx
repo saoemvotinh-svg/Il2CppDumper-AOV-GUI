@@ -12,6 +12,7 @@ import {
   RotateCw,
   Box,
   X,
+  ArrowLeft,
   ArrowUpRight,
   Terminal,
   Cpu,
@@ -100,6 +101,28 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
     setTimeout(() => setCopiedText(null), 2000);
   };
 
+  // --- On-Demand In-Memory Index Activation ---
+  const [isActivatingIndex, setIsActivatingIndex] = useState(false);
+
+  const handleActivateIndex = async (force = false) => {
+    setIsActivatingIndex(true);
+    try {
+      await fetch(apiUrl('/api/activate-indexing'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source: activeSource,
+          dir: artifacts?.directory || '',
+          force
+        })
+      });
+    } catch (err) {
+      console.error('Failed to activate indexing:', err);
+    } finally {
+      setIsActivatingIndex(false);
+    }
+  };
+
   const searchInputRef = React.useRef<HTMLInputElement>(null);
 
   // Perform Deep Symbol Search
@@ -116,6 +139,9 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
     }
 
     const filterType = overrideType || symbolTypeFilter;
+    if (indexingStatus?.phase === 'idle' && !indexingStatus?.isIndexing) {
+      handleActivateIndex(false);
+    }
     setIsSearching(true);
     try {
       const res = await fetch(
@@ -218,8 +244,377 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
     c.namespace.toLowerCase().includes(dllClassFilter.toLowerCase())
   );
 
+  if (selectedDll || selectedClass) {
+    return (
+      <div className="flex-1 flex flex-col h-full bg-[#17191C] overflow-hidden select-none">
+            {/* Desktop Command Bar */}
+            <div className="h-10 px-3 bg-[#151719] border-b border-[#2C3236] flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2.5 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedDll(null);
+                setSelectedClass(null);
+              }}
+              className="btn-secondary-action px-2.5 py-1 text-xs flex items-center gap-1.5 cursor-default font-mono hover:text-[#E6E8E6]"
+              title="Back to Artifacts Overview (Esc)"
+            >
+              <ArrowLeft className="w-3.5 h-3.5 text-[#C49B66]" />
+              <span>Back</span>
+            </button>
+            <span className="text-[#2C3236]">|</span>
+            <Box className="w-4 h-4 text-[#C49B66] shrink-0" />
+                <div className="flex items-center gap-1.5 text-xs font-mono text-[#E6E8E6] truncate">
+                  <span className="text-[#9FA6A2]">Assembly:</span>
+                  <span className="font-semibold text-[#C49B66]">{selectedDll || selectedClass?.meta.dll || 'Symbol Explorer'}</span>
+                  {selectedClass && (
+                    <>
+                      <span className="text-[#676E6A]">›</span>
+                      <span className="text-[#9FA6A2]">Class:</span>
+                      <span className="font-semibold text-[#E6E8E6]">{selectedClass.meta.name}</span>
+                      <span className="text-[10px] text-[#676E6A] bg-[#121416] px-1.5 py-0.2 rounded border border-[#2C3236]">
+                        TypeDef: {selectedClass.meta.typeDefIndex}
+                      </span>
+                    </>
+                  )}
+                  {dllClasses.length > 0 && (
+                    <span className="text-[11px] font-mono text-[#9FA6A2] bg-[#121416] px-2 py-0.5 rounded border border-[#2C3236] shrink-0 ml-1">
+                      {dllClasses.length} Types
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedDll(null);
+                    setSelectedClass(null);
+                  }}
+                  className="btn-secondary-action px-2.5 py-1 text-xs flex items-center gap-1.5 cursor-default font-mono"
+                  title="Close Inspector (Esc)"
+                >
+                  <span>Close</span>
+                  <kbd className="text-[10px] bg-[#121416] px-1 py-0.2 rounded border border-[#2C3236] text-[#676E6A]">Esc</kbd>
+                  <X className="w-3.5 h-3.5 text-[#9FA6A2]" />
+                </button>
+              </div>
+            </div>
+
+            {/* Split Workstation Pane */}
+            <div className="flex-1 flex overflow-hidden">
+              {/* Left Pane: Classes in this DLL */}
+              <div className="w-72 sm:w-80 border-r border-app-border flex flex-col bg-app-bg shrink-0">
+                <div className="p-2.5 border-b border-app-border bg-app-elevated/40">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={dllClassFilter}
+                      onChange={(e) => setDllClassFilter(e.target.value)}
+                      placeholder="Filter classes..."
+                      className="control-input w-full pl-7 pr-2 py-1 text-xs font-mono"
+                    />
+                    <Search className="w-3.5 h-3.5 text-ink-muted absolute left-2 top-2" />
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto divide-y divide-app-border/40">
+                  {isLoadingDllClasses ? (
+                    <div className="p-4 text-xs font-mono text-ink-muted text-center">
+                      Loading assembly classes...
+                    </div>
+                  ) : filteredDllClasses.length === 0 ? (
+                    <div className="p-4 text-xs font-mono text-ink-muted text-center">
+                      No classes found in assembly
+                    </div>
+                  ) : (
+                    filteredDllClasses.map((cls) => {
+                      const isSelected = selectedClass?.meta.typeDefIndex === cls.typeDefIndex;
+                      return (
+                        <div
+                          key={cls.typeDefIndex}
+                          onClick={() => handleInspectClass(cls.typeDefIndex, cls.name)}
+                          className={`p-2 cursor-pointer transition-colors ${
+                            isSelected
+                              ? 'bg-accent/15 border-l-2 border-accent text-ink-primary'
+                              : 'hover:bg-app-elevated/50 text-ink-secondary'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-mono font-medium truncate text-ink-primary">
+                              {cls.name}
+                            </span>
+                            <span className="text-[10px] font-mono text-ink-muted uppercase ml-1">
+                              {cls.kind[0]}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between text-[10px] font-mono text-ink-muted mt-0.5">
+                            <span className="truncate">{cls.namespace || '<global>'}</span>
+                            {cls.baseClass && (
+                              <span className="truncate max-w-[100px] text-ink-muted">
+                                : {cls.baseClass}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              {/* Right Pane: Class Symbol Inspector & Code */}
+              <div className="flex-1 flex flex-col overflow-hidden bg-app-workspace">
+                {isLoadingClass ? (
+                  <div className="flex-1 flex items-center justify-center text-xs font-mono text-ink-muted">
+                    Loading decompiled class metadata & AST...
+                  </div>
+                ) : !selectedClass ? (
+                  <div className="flex-1 flex flex-col items-center justify-center text-ink-muted text-xs font-mono space-y-2">
+                    <Layers className="w-8 h-8 text-ink-muted/50" />
+                    <span>Select a class from the list to inspect methods, fields, and code.</span>
+                  </div>
+                ) : (
+                  <>
+                    {/* Class Header Banner */}
+                    <div className="p-3.5 bg-app-elevated border-b border-app-border space-y-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-mono uppercase bg-accent/20 text-accent border border-accent/40 px-1.5 py-0.5 rounded font-bold">
+                            {selectedClass.meta.kind}
+                          </span>
+                          <h3 className="text-sm font-mono font-bold text-ink-primary">
+                            {selectedClass.meta.name}
+                          </h3>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          {selectedClass.isDecompiledClass && (
+                            <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/15 border border-emerald-500/30 text-emerald-400">
+                              <Sparkles className="w-3 h-3" />
+                              <span>Hex-Rays: {selectedClass.decompiledMethodCount} / {selectedClass.totalMethods} methods</span>
+                            </span>
+                          )}
+                          <a
+                            href={apiUrl(`/api/export-class-cs?typeDefIndex=${selectedClass.meta.typeDefIndex}&source=${activeSource}&beautify=true&dir=${encodeURIComponent(artifacts?.directory || '')}`)}
+                            download={`${selectedClass.meta.name}.cs`}
+                            className="btn-secondary-action px-2.5 py-1 text-xs flex items-center gap-1.5 cursor-pointer font-mono text-accent hover:border-accent"
+                            title="Download this class as standalone .cs file"
+                          >
+                            <Download className="w-3 h-3" />
+                            <span>Export .cs</span>
+                          </a>
+                          <button
+                            onClick={() => copyToClipboard(selectedClass.sourceCode)}
+                            className="btn-secondary-action px-2.5 py-1 text-xs flex items-center gap-1.5 cursor-pointer font-mono"
+                          >
+                            {copiedText === selectedClass.sourceCode ? (
+                              <Check className="w-3 h-3 text-status-ready" />
+                            ) : (
+                              <Copy className="w-3 h-3" />
+                            )}
+                            <span>Copy Code</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Hierarchy Badges (Class cha & Class con) */}
+                      <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+                        {/* Parent Class (Class cha) */}
+                        <div className="flex items-center gap-1 bg-app-bg px-2 py-0.5 rounded border border-app-border">
+                          <span className="text-ink-muted">Base (Class cha):</span>
+                          {selectedClass.meta.baseClass ? (
+                            <button
+                              onClick={() => handleInspectClass(undefined, selectedClass.meta.baseClass!)}
+                              className="text-accent hover:underline cursor-pointer font-semibold"
+                            >
+                              {selectedClass.meta.baseClass}
+                            </button>
+                          ) : (
+                            <span className="text-ink-muted">None (Root)</span>
+                          )}
+                        </div>
+
+                        {/* Child Classes (Class con) */}
+                        <div className="flex items-center gap-1 bg-app-bg px-2 py-0.5 rounded border border-app-border">
+                          <span className="text-ink-muted">Subclasses (Class con):</span>
+                          <span className="text-status-ready font-semibold">
+                            {selectedClass.meta.childCount}
+                          </span>
+                          {selectedClass.meta.childCount > 0 && (
+                            <span className="text-[10px] text-ink-muted truncate max-w-[200px]">
+                              ({selectedClass.meta.childClasses.slice(0, 3).join(', ')}
+                              {selectedClass.meta.childCount > 3 ? '...' : ''})
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Namespace */}
+                        <div className="flex items-center gap-1 bg-app-bg px-2 py-0.5 rounded border border-app-border">
+                          <span className="text-ink-muted">Namespace:</span>
+                          <span className="text-ink-secondary">
+                            {selectedClass.meta.namespace || '<global>'}
+                          </span>
+                        </div>
+
+                        {/* Assembly */}
+                        <div className="flex items-center gap-1 bg-app-bg px-2 py-0.5 rounded border border-app-border">
+                          <span className="text-ink-muted">Assembly:</span>
+                          <span className="text-ink-secondary">{selectedClass.meta.dll}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* View Switcher Tabs */}
+                    <div className="flex items-center justify-between px-3 border-b border-app-border bg-app-workspace">
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => setActiveClassTab('methods')}
+                          className={`px-3 py-2 text-xs font-mono uppercase tracking-wider border-b-2 cursor-pointer transition-colors ${
+                            activeClassTab === 'methods'
+                              ? 'border-accent text-accent font-semibold'
+                              : 'border-transparent text-ink-secondary hover:text-ink-primary'
+                          }`}
+                        >
+                          Methods ({selectedClass.methods.length})
+                        </button>
+                        <button
+                          onClick={() => setActiveClassTab('fields')}
+                          className={`px-3 py-2 text-xs font-mono uppercase tracking-wider border-b-2 cursor-pointer transition-colors ${
+                            activeClassTab === 'fields'
+                              ? 'border-accent text-accent font-semibold'
+                              : 'border-transparent text-ink-secondary hover:text-ink-primary'
+                          }`}
+                        >
+                          Fields ({selectedClass.fields.length})
+                        </button>
+                        <button
+                          onClick={() => setActiveClassTab('code')}
+                          className={`px-3 py-2 text-xs font-mono uppercase tracking-wider border-b-2 cursor-pointer transition-colors ${
+                            activeClassTab === 'code'
+                              ? 'border-accent text-accent font-semibold'
+                              : 'border-transparent text-ink-secondary hover:text-ink-primary'
+                          }`}
+                        >
+                          Decompiled C# Code
+                        </button>
+                      </div>
+
+                      {activeClassTab !== 'code' && (
+                        <input
+                          type="text"
+                          value={classMemberFilter}
+                          onChange={(e) => setClassMemberFilter(e.target.value)}
+                          placeholder={`Filter ${activeClassTab}...`}
+                          className="control-input px-2 py-0.5 text-xs font-mono w-44"
+                        />
+                      )}
+                    </div>
+
+                    {/* Active Tab View */}
+                    <div className="flex-1 overflow-y-auto p-3">
+                      {/* METHODS TAB */}
+                      {activeClassTab === 'methods' && (
+                        <div className="space-y-1.5 font-mono text-xs">
+                          {selectedClass.methods
+                            .filter((m) =>
+                              m.name.toLowerCase().includes(classMemberFilter.toLowerCase()) ||
+                              m.returnType.toLowerCase().includes(classMemberFilter.toLowerCase()) ||
+                              (m.body && m.body.toLowerCase().includes(classMemberFilter.toLowerCase()))
+                            )
+                            .map((method, i) => (
+                              <MethodAccordion
+                                key={i}
+                                method={method}
+                                copiedText={copiedText}
+                                onCopy={copyToClipboard}
+                                onSymbolClick={(sym) => handleInspectClass(undefined, sym)}
+                              />
+                            ))}
+                        </div>
+                      )}
+
+                      {/* FIELDS TAB */}
+                      {activeClassTab === 'fields' && (
+                        <div className="space-y-1.5 font-mono text-xs">
+                          {selectedClass.fields
+                            .filter((f) =>
+                              f.name.toLowerCase().includes(classMemberFilter.toLowerCase()) ||
+                              f.type.toLowerCase().includes(classMemberFilter.toLowerCase())
+                            )
+                            .map((field, i) => (
+                              <div
+                                key={i}
+                                className="p-2.5 rounded border border-app-border bg-app-elevated/40 hover:bg-app-elevated flex items-center justify-between gap-2"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] text-ink-muted uppercase">{field.access}</span>
+                                  <span className="text-status-ready font-medium select-text">{field.type}</span>
+                                  <span className="font-semibold text-ink-primary select-text">{field.name}</span>
+                                  <button
+                                    onClick={() => copyToClipboard(field.name)}
+                                    className="p-0.5 text-ink-muted hover:text-ink-primary cursor-pointer"
+                                    title="Copy field name"
+                                  >
+                                    <Copy className="w-2.5 h-2.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => copyToClipboard(field.raw)}
+                                    className="p-0.5 text-ink-muted hover:text-ink-primary cursor-pointer text-[10px]"
+                                    title="Copy full field definition"
+                                  >
+                                    [Copy Line]
+                                  </button>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  {field.offset && (
+                                    <button
+                                      onClick={() => copyToClipboard(field.offset!)}
+                                      className="px-2 py-0.5 rounded text-[11px] bg-app-bg hover:bg-app-elevatedHover border border-app-border text-accent cursor-pointer font-semibold flex items-center gap-1"
+                                      title="Copy memory offset"
+                                    >
+                                      {copiedText === field.offset ? (
+                                        <Check className="w-3 h-3 text-status-ready" />
+                                      ) : (
+                                        <Copy className="w-3 h-3" />
+                                      )}
+                                      <span className="select-text">{field.offset}</span>
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      )}
+
+                      {/* DECOMPILED CODE TAB */}
+                      {activeClassTab === 'code' && (
+                        <div className="h-full min-h-[450px]">
+                          <CodeViewer
+                            code={selectedClass.sourceCode}
+                            cleanCode={selectedClass.cleanSourceCode}
+                            fileName={`${selectedClass.meta.name}.cs`}
+                            isDecompiled={selectedClass.isDecompiledClass}
+                            onSymbolClick={(sym) => handleInspectClass(undefined, sym)}
+                            onDownloadCs={() => {
+                              window.open(apiUrl(`/api/export-class-cs?typeDefIndex=${selectedClass.meta.typeDefIndex}&source=${activeSource}&beautify=true&dir=${encodeURIComponent(artifacts?.directory || '')}`));
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-4">
+    <div className="flex-1 overflow-y-auto px-3 py-2.5 space-y-4">
       {/* Top Workstation Bar */}
       <section className="panel-frame">
         <div className="panel-header flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
@@ -374,43 +769,110 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
         )}
       </div>
 
-      {/* In-Memory Indexing Status & Real-time Progress Bar */}
-      {indexingStatus && (indexingStatus.isIndexing || indexingStatus.phase === 'ready') && (
-        <div className="p-3 rounded-lg border border-app-border bg-app-elevated/30 space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
-            <div className="flex items-center gap-2">
-              {indexingStatus.isIndexing ? (
-                <RotateCw className="w-3.5 h-3.5 text-accent animate-spin" />
-              ) : (
-                <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-              )}
-              <span className="font-semibold text-ink-primary">
-                {indexingStatus.isIndexing
-                  ? `Indexing ${indexingStatus.targetFile}... (${indexingStatus.percent}%)`
-                  : `In-Memory Index Ready: ${indexingStatus.targetFile}`}
-              </span>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 text-ink-secondary text-[11px]">
-              <span><strong>{indexingStatus.methodsCount.toLocaleString()}</strong> methods</span>
-              <span>•</span>
-              <span><strong>{indexingStatus.classesCount.toLocaleString()}</strong> classes</span>
-              <span>•</span>
-              <span><strong>{indexingStatus.fieldsCount.toLocaleString()}</strong> fields</span>
-              {!indexingStatus.isIndexing && indexingStatus.tookMs > 0 && (
-                <>
-                  <span>•</span>
-                  <span className="text-emerald-400 font-semibold">{indexingStatus.tookMs}ms (Instant Search Active)</span>
-                </>
-              )}
-            </div>
-          </div>
+      {/* In-Memory Indexing Status & On-Demand Activation Banner */}
+      {indexingStatus && (
+        <div className="p-3 rounded border border-app-border bg-[#17191C] space-y-2 select-none">
+          {/* State 1: Idle (Index not activated yet - Prevents startup lag) */}
+          {indexingStatus.phase === 'idle' && !indexingStatus.isIndexing ? (
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded bg-[#1F2326] border border-app-border flex items-center justify-center text-[#C49B66] shrink-0">
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-ink-primary">
+                      In-Memory Symbol Index ({activeSource})
+                    </span>
+                    <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[#1F2326] text-ink-muted border border-app-border">
+                      Idle / Standby
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-ink-secondary mt-0.5">
+                    Pre-loads ~302k methods into RAM for instant &lt;70ms deep queries. Click Active to index on demand without startup lag.
+                  </p>
+                </div>
+              </div>
 
-          {indexingStatus.isIndexing && (
-            <div className="w-full bg-app-workspace rounded-full h-2 overflow-hidden border border-app-border">
-              <div
-                className="bg-gradient-to-r from-accent to-emerald-400 h-full transition-all duration-300 rounded-full"
-                style={{ width: `${Math.max(4, indexingStatus.percent)}%` }}
-              />
+              <button
+                type="button"
+                onClick={() => handleActivateIndex(false)}
+                disabled={isActivatingIndex}
+                className="btn-primary-action px-3.5 py-1.5 text-xs font-semibold flex items-center gap-1.5 cursor-default shrink-0 shadow-sm disabled:opacity-50"
+                title="Active in-memory indexing for instant symbol searching"
+              >
+                {isActivatingIndex ? (
+                  <>
+                    <RotateCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Activating...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3.5 h-3.5 fill-current" />
+                    <span>Active Search Index</span>
+                  </>
+                )}
+              </button>
+            </div>
+          ) : indexingStatus.isIndexing ? (
+            /* State 2: Indexing in progress (Real-time Progress Bar) */
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
+                <div className="flex items-center gap-2">
+                  <RotateCw className="w-3.5 h-3.5 text-[#C49B66] animate-spin" />
+                  <span className="font-semibold text-ink-primary">
+                    Indexing {indexingStatus.targetFile}... ({indexingStatus.percent}%)
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-ink-secondary text-[11px]">
+                  <span><strong>{indexingStatus.methodsCount.toLocaleString()}</strong> methods</span>
+                  <span>•</span>
+                  <span><strong>{indexingStatus.classesCount.toLocaleString()}</strong> classes</span>
+                  <span>•</span>
+                  <span><strong>{indexingStatus.fieldsCount.toLocaleString()}</strong> fields</span>
+                </div>
+              </div>
+
+              <div className="w-full bg-[#121416] rounded-full h-2 overflow-hidden border border-app-border">
+                <div
+                  className="bg-gradient-to-r from-[#C49B66] to-[#6E9B7B] h-full transition-all duration-300 rounded-full"
+                  style={{ width: `${Math.max(4, indexingStatus.percent)}%` }}
+                />
+              </div>
+            </div>
+          ) : (
+            /* State 3: Ready (Active) */
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-3.5 h-3.5 text-[#6E9B7B]" />
+                <span className="font-semibold text-ink-primary">
+                  In-Memory Index Active: {indexingStatus.targetFile}
+                </span>
+                <span className="text-[10px] bg-[#121416] px-1.5 py-0.2 rounded border border-app-border text-[#6E9B7B] font-semibold">
+                  Online
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-ink-secondary text-[11px]">
+                <span><strong>{indexingStatus.methodsCount.toLocaleString()}</strong> methods</span>
+                <span>•</span>
+                <span><strong>{indexingStatus.classesCount.toLocaleString()}</strong> classes</span>
+                <span>•</span>
+                <span><strong>{indexingStatus.fieldsCount.toLocaleString()}</strong> fields</span>
+                {indexingStatus.tookMs > 0 && (
+                  <>
+                    <span>•</span>
+                    <span className="text-[#6E9B7B] font-semibold">{indexingStatus.tookMs}ms (Instant Search Active)</span>
+                  </>
+                )}
+                <button
+                  type="button"
+                  onClick={() => handleActivateIndex(true)}
+                  className="btn-secondary-action px-2 py-0.5 text-[10px] ml-2 cursor-default font-mono"
+                  title="Re-index dump file"
+                >
+                  <span>Re-Index</span>
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -947,362 +1409,6 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
         </div>
       </section>
 
-      {/* FULL-WINDOW DOCKED ASSEMBLY & CLASS INSPECTOR (VS Code / dnSpy desktop view) */}
-      {(selectedDll || selectedClass) && (
-        <div className="fixed inset-0 z-50 bg-[#121416] flex flex-col overflow-hidden select-none">
-          <div className="w-full h-full bg-[#17191C] flex flex-col overflow-hidden">
-            {/* Desktop Command Bar */}
-            <div className="h-9 px-3 bg-[#151719] border-b border-[#2C3236] flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-2.5 overflow-hidden">
-                <Box className="w-4 h-4 text-[#C49B66] shrink-0" />
-                <div className="flex items-center gap-1.5 text-xs font-mono text-[#E6E8E6] truncate">
-                  <span className="text-[#9FA6A2]">Assembly:</span>
-                  <span className="font-semibold text-[#C49B66]">{selectedDll || selectedClass?.meta.dll || 'Symbol Explorer'}</span>
-                  {selectedClass && (
-                    <>
-                      <span className="text-[#676E6A]">›</span>
-                      <span className="text-[#9FA6A2]">Class:</span>
-                      <span className="font-semibold text-[#E6E8E6]">{selectedClass.meta.name}</span>
-                      <span className="text-[10px] text-[#676E6A] bg-[#121416] px-1.5 py-0.2 rounded border border-[#2C3236]">
-                        TypeDef: {selectedClass.meta.typeDefIndex}
-                      </span>
-                    </>
-                  )}
-                  {dllClasses.length > 0 && (
-                    <span className="text-[11px] font-mono text-[#9FA6A2] bg-[#121416] px-2 py-0.5 rounded border border-[#2C3236] shrink-0 ml-1">
-                      {dllClasses.length} Types
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedDll(null);
-                    setSelectedClass(null);
-                  }}
-                  className="btn-secondary-action px-2.5 py-1 text-xs flex items-center gap-1.5 cursor-default font-mono"
-                  title="Close Inspector (Esc)"
-                >
-                  <span>Close</span>
-                  <kbd className="text-[10px] bg-[#121416] px-1 py-0.2 rounded border border-[#2C3236] text-[#676E6A]">Esc</kbd>
-                  <X className="w-3.5 h-3.5 text-[#9FA6A2]" />
-                </button>
-              </div>
-            </div>
-
-            {/* Split Workstation Pane */}
-            <div className="flex-1 flex overflow-hidden">
-              {/* Left Pane: Classes in this DLL */}
-              <div className="w-72 sm:w-80 border-r border-app-border flex flex-col bg-app-bg shrink-0">
-                <div className="p-2.5 border-b border-app-border bg-app-elevated/40">
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={dllClassFilter}
-                      onChange={(e) => setDllClassFilter(e.target.value)}
-                      placeholder="Filter classes..."
-                      className="control-input w-full pl-7 pr-2 py-1 text-xs font-mono"
-                    />
-                    <Search className="w-3.5 h-3.5 text-ink-muted absolute left-2 top-2" />
-                  </div>
-                </div>
-
-                <div className="flex-1 overflow-y-auto divide-y divide-app-border/40">
-                  {isLoadingDllClasses ? (
-                    <div className="p-4 text-xs font-mono text-ink-muted text-center">
-                      Loading assembly classes...
-                    </div>
-                  ) : filteredDllClasses.length === 0 ? (
-                    <div className="p-4 text-xs font-mono text-ink-muted text-center">
-                      No classes found in assembly
-                    </div>
-                  ) : (
-                    filteredDllClasses.map((cls) => {
-                      const isSelected = selectedClass?.meta.typeDefIndex === cls.typeDefIndex;
-                      return (
-                        <div
-                          key={cls.typeDefIndex}
-                          onClick={() => handleInspectClass(cls.typeDefIndex, cls.name)}
-                          className={`p-2 cursor-pointer transition-colors ${
-                            isSelected
-                              ? 'bg-accent/15 border-l-2 border-accent text-ink-primary'
-                              : 'hover:bg-app-elevated/50 text-ink-secondary'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-mono font-medium truncate text-ink-primary">
-                              {cls.name}
-                            </span>
-                            <span className="text-[10px] font-mono text-ink-muted uppercase ml-1">
-                              {cls.kind[0]}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between text-[10px] font-mono text-ink-muted mt-0.5">
-                            <span className="truncate">{cls.namespace || '<global>'}</span>
-                            {cls.baseClass && (
-                              <span className="truncate max-w-[100px] text-ink-muted">
-                                : {cls.baseClass}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-
-              {/* Right Pane: Class Symbol Inspector & Code */}
-              <div className="flex-1 flex flex-col overflow-hidden bg-app-workspace">
-                {isLoadingClass ? (
-                  <div className="flex-1 flex items-center justify-center text-xs font-mono text-ink-muted">
-                    Loading decompiled class metadata & AST...
-                  </div>
-                ) : !selectedClass ? (
-                  <div className="flex-1 flex flex-col items-center justify-center text-ink-muted text-xs font-mono space-y-2">
-                    <Layers className="w-8 h-8 text-ink-muted/50" />
-                    <span>Select a class from the list to inspect methods, fields, and code.</span>
-                  </div>
-                ) : (
-                  <>
-                    {/* Class Header Banner */}
-                    <div className="p-3.5 bg-app-elevated border-b border-app-border space-y-2">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-mono uppercase bg-accent/20 text-accent border border-accent/40 px-1.5 py-0.5 rounded font-bold">
-                            {selectedClass.meta.kind}
-                          </span>
-                          <h3 className="text-sm font-mono font-bold text-ink-primary">
-                            {selectedClass.meta.name}
-                          </h3>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          {selectedClass.isDecompiledClass && (
-                            <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/15 border border-emerald-500/30 text-emerald-400">
-                              <Sparkles className="w-3 h-3" />
-                              <span>Hex-Rays: {selectedClass.decompiledMethodCount} / {selectedClass.totalMethods} methods</span>
-                            </span>
-                          )}
-                          <a
-                            href={apiUrl(`/api/export-class-cs?typeDefIndex=${selectedClass.meta.typeDefIndex}&source=${activeSource}&beautify=true&dir=${encodeURIComponent(artifacts?.directory || '')}`)}
-                            download={`${selectedClass.meta.name}.cs`}
-                            className="btn-secondary-action px-2.5 py-1 text-xs flex items-center gap-1.5 cursor-pointer font-mono text-accent hover:border-accent"
-                            title="Download this class as standalone .cs file"
-                          >
-                            <Download className="w-3 h-3" />
-                            <span>Export .cs</span>
-                          </a>
-                          <button
-                            onClick={() => copyToClipboard(selectedClass.sourceCode)}
-                            className="btn-secondary-action px-2.5 py-1 text-xs flex items-center gap-1.5 cursor-pointer font-mono"
-                          >
-                            {copiedText === selectedClass.sourceCode ? (
-                              <Check className="w-3 h-3 text-status-ready" />
-                            ) : (
-                              <Copy className="w-3 h-3" />
-                            )}
-                            <span>Copy Code</span>
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Hierarchy Badges (Class cha & Class con) */}
-                      <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
-                        {/* Parent Class (Class cha) */}
-                        <div className="flex items-center gap-1 bg-app-bg px-2 py-0.5 rounded border border-app-border">
-                          <span className="text-ink-muted">Base (Class cha):</span>
-                          {selectedClass.meta.baseClass ? (
-                            <button
-                              onClick={() => handleInspectClass(undefined, selectedClass.meta.baseClass!)}
-                              className="text-accent hover:underline cursor-pointer font-semibold"
-                            >
-                              {selectedClass.meta.baseClass}
-                            </button>
-                          ) : (
-                            <span className="text-ink-muted">None (Root)</span>
-                          )}
-                        </div>
-
-                        {/* Child Classes (Class con) */}
-                        <div className="flex items-center gap-1 bg-app-bg px-2 py-0.5 rounded border border-app-border">
-                          <span className="text-ink-muted">Subclasses (Class con):</span>
-                          <span className="text-status-ready font-semibold">
-                            {selectedClass.meta.childCount}
-                          </span>
-                          {selectedClass.meta.childCount > 0 && (
-                            <span className="text-[10px] text-ink-muted truncate max-w-[200px]">
-                              ({selectedClass.meta.childClasses.slice(0, 3).join(', ')}
-                              {selectedClass.meta.childCount > 3 ? '...' : ''})
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Namespace */}
-                        <div className="flex items-center gap-1 bg-app-bg px-2 py-0.5 rounded border border-app-border">
-                          <span className="text-ink-muted">Namespace:</span>
-                          <span className="text-ink-secondary">
-                            {selectedClass.meta.namespace || '<global>'}
-                          </span>
-                        </div>
-
-                        {/* Assembly */}
-                        <div className="flex items-center gap-1 bg-app-bg px-2 py-0.5 rounded border border-app-border">
-                          <span className="text-ink-muted">Assembly:</span>
-                          <span className="text-ink-secondary">{selectedClass.meta.dll}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* View Switcher Tabs */}
-                    <div className="flex items-center justify-between px-3 border-b border-app-border bg-app-workspace">
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => setActiveClassTab('methods')}
-                          className={`px-3 py-2 text-xs font-mono uppercase tracking-wider border-b-2 cursor-pointer transition-colors ${
-                            activeClassTab === 'methods'
-                              ? 'border-accent text-accent font-semibold'
-                              : 'border-transparent text-ink-secondary hover:text-ink-primary'
-                          }`}
-                        >
-                          Methods ({selectedClass.methods.length})
-                        </button>
-                        <button
-                          onClick={() => setActiveClassTab('fields')}
-                          className={`px-3 py-2 text-xs font-mono uppercase tracking-wider border-b-2 cursor-pointer transition-colors ${
-                            activeClassTab === 'fields'
-                              ? 'border-accent text-accent font-semibold'
-                              : 'border-transparent text-ink-secondary hover:text-ink-primary'
-                          }`}
-                        >
-                          Fields ({selectedClass.fields.length})
-                        </button>
-                        <button
-                          onClick={() => setActiveClassTab('code')}
-                          className={`px-3 py-2 text-xs font-mono uppercase tracking-wider border-b-2 cursor-pointer transition-colors ${
-                            activeClassTab === 'code'
-                              ? 'border-accent text-accent font-semibold'
-                              : 'border-transparent text-ink-secondary hover:text-ink-primary'
-                          }`}
-                        >
-                          Decompiled C# Code
-                        </button>
-                      </div>
-
-                      {activeClassTab !== 'code' && (
-                        <input
-                          type="text"
-                          value={classMemberFilter}
-                          onChange={(e) => setClassMemberFilter(e.target.value)}
-                          placeholder={`Filter ${activeClassTab}...`}
-                          className="control-input px-2 py-0.5 text-xs font-mono w-44"
-                        />
-                      )}
-                    </div>
-
-                    {/* Active Tab View */}
-                    <div className="flex-1 overflow-y-auto p-3">
-                      {/* METHODS TAB */}
-                      {activeClassTab === 'methods' && (
-                        <div className="space-y-1.5 font-mono text-xs">
-                          {selectedClass.methods
-                            .filter((m) =>
-                              m.name.toLowerCase().includes(classMemberFilter.toLowerCase()) ||
-                              m.returnType.toLowerCase().includes(classMemberFilter.toLowerCase()) ||
-                              (m.body && m.body.toLowerCase().includes(classMemberFilter.toLowerCase()))
-                            )
-                            .map((method, i) => (
-                              <MethodAccordion
-                                key={i}
-                                method={method}
-                                copiedText={copiedText}
-                                onCopy={copyToClipboard}
-                                onSymbolClick={(sym) => handleInspectClass(undefined, sym)}
-                              />
-                            ))}
-                        </div>
-                      )}
-
-                      {/* FIELDS TAB */}
-                      {activeClassTab === 'fields' && (
-                        <div className="space-y-1.5 font-mono text-xs">
-                          {selectedClass.fields
-                            .filter((f) =>
-                              f.name.toLowerCase().includes(classMemberFilter.toLowerCase()) ||
-                              f.type.toLowerCase().includes(classMemberFilter.toLowerCase())
-                            )
-                            .map((field, i) => (
-                              <div
-                                key={i}
-                                className="p-2.5 rounded border border-app-border bg-app-elevated/40 hover:bg-app-elevated flex items-center justify-between gap-2"
-                              >
-                                <div className="flex items-center gap-2">
-                                  <span className="text-[10px] text-ink-muted uppercase">{field.access}</span>
-                                  <span className="text-status-ready font-medium select-text">{field.type}</span>
-                                  <span className="font-semibold text-ink-primary select-text">{field.name}</span>
-                                  <button
-                                    onClick={() => copyToClipboard(field.name)}
-                                    className="p-0.5 text-ink-muted hover:text-ink-primary cursor-pointer"
-                                    title="Copy field name"
-                                  >
-                                    <Copy className="w-2.5 h-2.5" />
-                                  </button>
-                                  <button
-                                    onClick={() => copyToClipboard(field.raw)}
-                                    className="p-0.5 text-ink-muted hover:text-ink-primary cursor-pointer text-[10px]"
-                                    title="Copy full field definition"
-                                  >
-                                    [Copy Line]
-                                  </button>
-                                </div>
-
-                                <div className="flex items-center gap-2">
-                                  {field.offset && (
-                                    <button
-                                      onClick={() => copyToClipboard(field.offset!)}
-                                      className="px-2 py-0.5 rounded text-[11px] bg-app-bg hover:bg-app-elevatedHover border border-app-border text-accent cursor-pointer font-semibold flex items-center gap-1"
-                                      title="Copy memory offset"
-                                    >
-                                      {copiedText === field.offset ? (
-                                        <Check className="w-3 h-3 text-status-ready" />
-                                      ) : (
-                                        <Copy className="w-3 h-3" />
-                                      )}
-                                      <span className="select-text">{field.offset}</span>
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
-                        </div>
-                      )}
-
-                      {/* DECOMPILED CODE TAB */}
-                      {activeClassTab === 'code' && (
-                        <div className="h-full min-h-[450px]">
-                          <CodeViewer
-                            code={selectedClass.sourceCode}
-                            cleanCode={selectedClass.cleanSourceCode}
-                            fileName={`${selectedClass.meta.name}.cs`}
-                            isDecompiled={selectedClass.isDecompiledClass}
-                            onSymbolClick={(sym) => handleInspectClass(undefined, sym)}
-                            onDownloadCs={() => {
-                              window.open(apiUrl(`/api/export-class-cs?typeDefIndex=${selectedClass.meta.typeDefIndex}&source=${activeSource}&beautify=true&dir=${encodeURIComponent(artifacts?.directory || '')}`));
-                            }}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
           </div>
-        </div>
-      )}
-    </div>
   );
 };

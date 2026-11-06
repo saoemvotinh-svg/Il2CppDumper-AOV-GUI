@@ -232,9 +232,9 @@ export function App() {
       />
 
       {/* Main Workspace Area - Full-bleed Desktop Layout */}
-      <main className="flex-1 w-full overflow-y-auto px-3 py-2.5 flex flex-col">
+      <main className="flex-1 w-full overflow-hidden flex flex-col">
         {activeTab === 'dump' ? (
-          <div className="space-y-3 max-w-full">
+          <div className="flex-1 overflow-y-auto px-3 py-2.5 space-y-3 max-w-full">
             {/* Input Selection Card */}
             <BinaryDropzone
               elfPath={elfPath}
@@ -319,7 +319,7 @@ export function App() {
             />
           </div>
         ) : activeTab === 'artifacts' ? (
-          <div className="flex-1 flex flex-col h-full">
+          <div className="flex-1 flex flex-col h-full overflow-hidden">
             <ArtifactsExplorer
               artifacts={artifacts}
               onRefresh={fetchArtifacts}
@@ -327,7 +327,7 @@ export function App() {
             />
           </div>
         ) : (
-          <div className="flex-1 flex flex-col h-full">
+          <div className="flex-1 flex flex-col h-full overflow-y-auto px-3 py-2.5">
             <MetadataFixer
               onSwitchToPipeline={(newMeta) => {
                 if (newMeta) {
