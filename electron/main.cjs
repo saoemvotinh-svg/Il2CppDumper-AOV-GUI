@@ -24,7 +24,13 @@ function createWindow(port) {
     minWidth: 1024,
     minHeight: 700,
     title: 'IL2CPPDUMPER WORKSTATION',
-    backgroundColor: '#151719',
+    backgroundColor: '#121416',
+    titleBarStyle: 'hidden',
+    titleBarOverlay: {
+      color: '#141618',
+      symbolColor: '#9FA6A2',
+      height: 36
+    },
     show: false,
     autoHideMenuBar: true,
     webPreferences: {

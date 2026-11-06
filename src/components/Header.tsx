@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Cpu, Terminal, Layers, Wrench, Minus, Square, Copy, X } from 'lucide-react';
+import React from 'react';
+import { Cpu, Terminal, Layers, Wrench } from 'lucide-react';
 
 interface HeaderProps {
   activeTab: 'dump' | 'artifacts' | 'fix-metadata';
@@ -14,33 +14,11 @@ export const Header: React.FC<HeaderProps> = ({
   isRunning,
   totalDlls = 89,
 }) => {
-  const [isMaximized, setIsMaximized] = useState(false);
   const isElectron = Boolean(window.electronAPI?.isElectron);
-
-  useEffect(() => {
-    if (window.electronAPI?.isMaximized) {
-      window.electronAPI.isMaximized().then(setIsMaximized).catch(() => {});
-    }
-  }, []);
-
-  const handleMinimize = () => {
-    window.electronAPI?.minimizeWindow?.();
-  };
-
-  const handleMaximize = async () => {
-    if (window.electronAPI?.maximizeWindow) {
-      const maximized = await window.electronAPI.maximizeWindow();
-      setIsMaximized(maximized);
-    }
-  };
-
-  const handleClose = () => {
-    window.electronAPI?.closeWindow?.();
-  };
 
   return (
     <header className="border-b border-[#2C3236] bg-[#141618] select-none shrink-0 z-30">
-      {/* Top Title Bar with Window Drag & Controls */}
+      {/* Unified Single Title Bar with Window Drag & Native Overlay Support */}
       <div className="titlebar-drag flex items-center justify-between h-9 px-3">
         {/* Left: App Identity & Architecture Telemetry */}
         <div className="flex items-center gap-2.5 titlebar-no-drag">
@@ -115,39 +93,10 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         </nav>
 
-        {/* Right: Window Control Caption Buttons (in Electron) or System Status */}
-        <div className="flex items-center gap-1 titlebar-no-drag">
+        {/* Right: Reserved space for Windows TitleBarOverlay native caption buttons */}
+        <div className="titlebar-no-drag shrink-0 flex items-center justify-end">
           {isElectron ? (
-            <div className="flex items-center -mr-2">
-              <button
-                type="button"
-                onClick={handleMinimize}
-                className="caption-btn"
-                title="Minimize Window"
-              >
-                <Minus className="w-3.5 h-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={handleMaximize}
-                className="caption-btn"
-                title={isMaximized ? "Restore Down" : "Maximize Window"}
-              >
-                {isMaximized ? (
-                  <Copy className="w-3 h-3 rotate-180" />
-                ) : (
-                  <Square className="w-3 h-3" />
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={handleClose}
-                className="caption-btn caption-btn-close"
-                title="Close"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
+            <div className="w-[138px] h-9" />
           ) : (
             <div className="text-[11px] font-mono text-[#676E6A]">
               <span>Desktop Bridge Active</span>
