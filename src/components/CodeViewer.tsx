@@ -194,10 +194,10 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({
                 ? 'border-amber-500/50 bg-amber-500/10 text-amber-300'
                 : 'border-app-border bg-[#0d1117] text-ink-secondary hover:text-ink-primary hover:border-ink-muted'
             }`}
-            title="Bật/Tắt chế độ chỉnh sửa code tạm thời để copy (Không lưu vào file)"
+            title="Toggle scratchpad editor mode (in-memory edits for quick copying - never writes to disk)"
           >
             <Edit3 className="w-3 h-3" />
-            <span>{isEditing ? 'Scratchpad Active' : 'Sửa Tạm (Scratchpad)'}</span>
+            <span>{isEditing ? 'Scratchpad Active' : 'Scratchpad Editor'}</span>
           </button>
 
           {isDecompiled && (
@@ -213,10 +213,10 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({
             <button
               onClick={handleReset}
               className="px-2 py-1 rounded bg-[#0d1117] border border-app-border text-ink-secondary hover:text-ink-primary cursor-pointer flex items-center gap-1 text-[11px]"
-              title="Khôi phục lại code gốc ban đầu"
+              title="Revert scratchpad to original source code"
             >
               <RotateCcw className="w-3 h-3" />
-              <span>Reset Gốc</span>
+              <span>Reset Original</span>
             </button>
           )}
 
@@ -227,20 +227,20 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({
                 ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400'
                 : 'border-app-border bg-[#0d1117] text-ink-secondary hover:text-accent hover:border-accent'
             }`}
-            title="Sao chép toàn bộ mã code hiện tại"
+            title="Copy code to clipboard"
           >
             {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-            <span>{copied ? 'Đã Copy!' : 'Copy Code'}</span>
+            <span>{copied ? 'Copied!' : 'Copy Code'}</span>
           </button>
 
           {onDownloadCs && (
             <button
               onClick={onDownloadCs}
               className="px-2.5 py-1 rounded bg-accent/15 border border-accent/40 text-accent hover:bg-accent/25 cursor-pointer flex items-center gap-1 text-[11px] font-medium"
-              title="Tải riêng class này thành file .cs hoàn chỉnh"
+              title="Export this class as a standalone .cs file"
             >
               <Download className="w-3 h-3" />
-              <span>Tải file .cs</span>
+              <span>Export .cs</span>
             </button>
           )}
         </div>
@@ -250,9 +250,9 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({
       {isEditing && (
         <div className="px-3 py-1.5 bg-amber-500/10 border-b border-amber-500/30 text-amber-300 text-[11px] flex items-center justify-between">
           <span>
-            ⚠️ <strong>Chế độ Scratchpad In-Memory:</strong> Bạn có thể gõ sửa đổi trực tiếp để phục vụ việc mod/copy. Code này <u>tuyệt đối không ghi đè vào file đĩa</u>.
+            ⚠️ <strong>In-Memory Scratchpad:</strong> Edit code directly for temporary experimentation or copying. Edits <u>are never written to disk</u>.
           </span>
-          <span className="text-[10px] text-amber-400/80">Nhấn &quot;Reset Gốc&quot; để khôi phục bất cứ lúc nào</span>
+          <span className="text-[10px] text-amber-400/80">Click &quot;Reset Original&quot; to restore source code at any time</span>
         </div>
       )}
 

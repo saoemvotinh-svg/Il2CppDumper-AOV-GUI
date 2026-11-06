@@ -106,7 +106,7 @@ export const MethodAccordion: React.FC<MethodAccordionProps> = ({
             {hasBody && (
               <span className="text-accent text-[10px] flex items-center gap-0.5 ml-2">
                 <Code2 className="w-3 h-3" />
-                <span>{isOpen ? 'Thu gọn' : 'Xem Thân Hàm'}</span>
+                <span>{isOpen ? 'Collapse Body' : 'View Method Body'}</span>
               </span>
             )}
           </div>

@@ -17,7 +17,7 @@ import {
   Cpu,
   Sparkles
 } from 'lucide-react';
-import type { ArtifactData, SymbolItem, ClassDetail, DllClassSummary } from '../types';
+import type { ArtifactData, SymbolItem, ClassDetail, DllClassSummary, IndexingStatus } from '../types';
 import { CodeViewer } from './CodeViewer';
 import { MethodAccordion } from './MethodAccordion';
 import { Download } from 'lucide-react';
@@ -45,6 +45,31 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
       setActiveSource('dump.cs');
     }
   }, [artifacts?.hasDumpV2]);
+
+  // --- In-Memory Indexing Status ---
+  const [indexingStatus, setIndexingStatus] = useState<IndexingStatus | null>(null);
+
+  // Poll indexing status periodically
+  React.useEffect(() => {
+    let interval: any = null;
+    const fetchStatus = async () => {
+      try {
+        const res = await fetch(apiUrl('/api/indexing-status'));
+        if (res.ok) {
+          const data: IndexingStatus = await res.json();
+          setIndexingStatus(data);
+        }
+      } catch (err) {
+        // ignore
+      }
+    };
+
+    fetchStatus();
+    interval = setInterval(fetchStatus, 1000);
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, []);
 
   // --- Symbol Search State ---
   const [searchQuery, setSearchQuery] = useState('');
@@ -266,7 +291,7 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
                   ? 'text-ink-secondary hover:text-ink-primary cursor-pointer'
                   : 'text-ink-muted/40 cursor-not-allowed opacity-50'
               }`}
-              title={artifacts?.hasDumpV2 ? "Sử dụng dumpv2.cs (Có toàn bộ thân hàm Hex-Rays)" : "Chưa có dumpv2.cs. Chạy script ida_export_dumpv2.py để tạo!"}
+              title={artifacts?.hasDumpV2 ? "Use dumpv2.cs (Includes full Hex-Rays method bodies)" : "Chưa có dumpv2.cs. Chạy script ida_export_dumpv2.py để tạo!"}
             >
               <Sparkles className="w-3.5 h-3.5" />
               <span>dumpv2.cs (Hex-Rays)</span>
@@ -282,7 +307,7 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
                   ? 'bg-app-elevated text-ink-primary font-semibold'
                   : 'text-ink-secondary hover:text-ink-primary'
               }`}
-              title="Sử dụng dump.cs tiêu chuẩn (Chữ ký rỗng)"
+              title="Use standard dump.cs (Signatures without bodies)"
             >
               <FileCode2 className="w-3.5 h-3.5" />
               <span>dump.cs (Standard)</span>
@@ -302,12 +327,54 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
           </div>
         ) : (
           <div className="flex items-center gap-1.5 text-xs text-ink-secondary">
-            <span>💡 Muốn xem thân hàm logic? Chạy</span>
+            <span>💡 Want to inspect method bodies? Run</span>
             <code className="text-accent bg-app-workspace px-1.5 py-0.5 rounded border border-app-border font-mono text-[11px]">ida_export_dumpv2.py</code>
-            <span>trong IDA Pro!</span>
+            <span>in IDA Pro!</span>
           </div>
         )}
       </div>
+
+      {/* In-Memory Indexing Status & Real-time Progress Bar */}
+      {indexingStatus && (indexingStatus.isIndexing || indexingStatus.phase === 'ready') && (
+        <div className="p-3 rounded-lg border border-app-border bg-app-elevated/30 space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
+            <div className="flex items-center gap-2">
+              {indexingStatus.isIndexing ? (
+                <RotateCw className="w-3.5 h-3.5 text-accent animate-spin" />
+              ) : (
+                <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+              )}
+              <span className="font-semibold text-ink-primary">
+                {indexingStatus.isIndexing
+                  ? `Indexing ${indexingStatus.targetFile}... (${indexingStatus.percent}%)`
+                  : `In-Memory Index Ready: ${indexingStatus.targetFile}`}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-ink-secondary text-[11px]">
+              <span><strong>{indexingStatus.methodsCount.toLocaleString()}</strong> methods</span>
+              <span>•</span>
+              <span><strong>{indexingStatus.classesCount.toLocaleString()}</strong> classes</span>
+              <span>•</span>
+              <span><strong>{indexingStatus.fieldsCount.toLocaleString()}</strong> fields</span>
+              {!indexingStatus.isIndexing && indexingStatus.tookMs > 0 && (
+                <>
+                  <span>•</span>
+                  <span className="text-emerald-400 font-semibold">{indexingStatus.tookMs}ms (Instant Search Active)</span>
+                </>
+              )}
+            </div>
+          </div>
+
+          {indexingStatus.isIndexing && (
+            <div className="w-full bg-app-workspace rounded-full h-2 overflow-hidden border border-app-border">
+              <div
+                className="bg-gradient-to-r from-accent to-emerald-400 h-full transition-all duration-300 rounded-full"
+                style={{ width: `${Math.max(4, indexingStatus.percent)}%` }}
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Deep Symbol Search In dump.cs */}
       <section className="panel-frame">
@@ -338,7 +405,7 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
 
             {/* Type Filter Tabs */}
             <div className="flex items-center gap-1 bg-app-elevated p-0.5 rounded border border-app-border">
-              {(['all', 'method', 'field', 'class', 'body'] as const).map((t) => (
+              {(['all', 'class', 'method', 'field', 'body'] as const).map((t) => (
                 <button
                   key={t}
                   type="button"
@@ -346,13 +413,21 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
                     setSymbolTypeFilter(t);
                     if (searchQuery.length >= 2) handleSearch(undefined, t);
                   }}
-                  className={`px-2.5 py-1 text-[11px] font-mono uppercase tracking-wider rounded transition-colors cursor-pointer ${
+                  className={`px-2.5 py-1 text-[11px] font-mono tracking-wider rounded transition-colors cursor-pointer ${
                     symbolTypeFilter === t
                       ? 'bg-accent text-app-bg font-semibold shadow-sm'
                       : 'text-ink-secondary hover:text-ink-primary'
                   }`}
                 >
-                  {t === 'all' ? 'All' : t === 'body' ? '⚡ Ruột hàm' : t + 's'}
+                  {t === 'all'
+                    ? 'All Symbols'
+                    : t === 'class'
+                    ? 'Classes'
+                    : t === 'method'
+                    ? 'Methods'
+                    : t === 'field'
+                    ? 'Fields'
+                    : 'Method Bodies'}
                 </button>
               ))}
             </div>
@@ -393,7 +468,7 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
                             : 'bg-app-elevated text-ink-primary border border-app-border'
                         }`}
                       >
-                        {item.symbolType === 'method-body' ? '⚡ Thân Hàm' : item.symbolType}
+                        {item.symbolType === 'method-body' ? 'Body Match' : item.symbolType}
                       </span>
 
                       {/* Symbol Name & Copy */}
@@ -733,7 +808,7 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
               },
               {
                 fileName: 'ida_export_dumpv2.py',
-                title: 'Xuất Full Thân Hàm dumpv2.cs (Hex-Rays 🚀)',
+                title: 'Export Full Method Bodies to dumpv2.cs (Hex-Rays 🚀)',
                 desc: 'Tự động decompile toàn bộ hàm trong dump.cs bằng IDA Hex-Rays, chuẩn hóa tên hàm trong database IDB và xuất ra file dumpv2.cs có đầy đủ thân hàm C#.',
                 tag: 'Python 3 / Hex-Rays F5',
                 badge: 'DumpV2 Engine ⚡',

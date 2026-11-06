@@ -160,6 +160,18 @@ export interface DllClassSummary {
   childCount: number;
 }
 
+export interface IndexingStatus {
+  isIndexing: boolean;
+  phase: 'idle' | 'indexing' | 'ready';
+  targetFile: string;
+  percent: number;
+  classesCount: number;
+  methodsCount: number;
+  fieldsCount: number;
+  linesRead: number;
+  tookMs: number;
+}
+
 export interface HeaderCandidate {
   offset: number;
   offsetHex: string;
