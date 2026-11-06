@@ -55,6 +55,7 @@ export interface ArtifactData {
   totalDlls: number;
   hasDumpV2?: boolean;
   dumpV2Size?: number;
+  dumpCsSize?: number;
   defaultSource?: 'dumpv2.cs' | 'dump.cs';
 }
 
@@ -212,6 +213,10 @@ declare global {
       browseFile: (options?: { title?: string; filter?: Array<{ name: string; extensions: string[] }> }) => Promise<{ selectedPath?: string; cancelled?: boolean }>;
       browseFolder: (options?: { title?: string }) => Promise<{ selectedPath?: string; cancelled?: boolean }>;
       openFolder: (dirPath: string) => Promise<{ success: boolean; error?: string }>;
+      minimizeWindow?: () => Promise<void>;
+      maximizeWindow?: () => Promise<boolean>;
+      closeWindow?: () => Promise<void>;
+      isMaximized?: () => Promise<boolean>;
     };
   }
 }

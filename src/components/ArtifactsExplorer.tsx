@@ -100,17 +100,27 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
     setTimeout(() => setCopiedText(null), 2000);
   };
 
+  const searchInputRef = React.useRef<HTMLInputElement>(null);
+
   // Perform Deep Symbol Search
-  const handleSearch = async (e?: React.FormEvent, overrideType?: 'all' | 'method' | 'field' | 'class' | 'body') => {
+  const handleSearch = async (
+    e?: React.FormEvent,
+    overrideType?: 'all' | 'method' | 'field' | 'class' | 'body',
+    overrideQuery?: string
+  ) => {
     if (e) e.preventDefault();
-    if (!searchQuery.trim() || searchQuery.length < 2) return;
+    const q = (overrideQuery !== undefined ? overrideQuery : searchQuery).trim();
+    if (!q || q.length < 2) {
+      setSymbolResults([]);
+      return;
+    }
 
     const filterType = overrideType || symbolTypeFilter;
     setIsSearching(true);
     try {
       const res = await fetch(
         apiUrl(
-          `/api/search-dump?query=${encodeURIComponent(searchQuery)}&type=${filterType}&limit=50&source=${activeSource}${filterType === 'body' ? '&searchBody=true' : ''}&dir=${encodeURIComponent(
+          `/api/search-dump?query=${encodeURIComponent(q)}&type=${filterType}&limit=100&source=${activeSource}${filterType === 'body' ? '&searchBody=true' : ''}&dir=${encodeURIComponent(
             artifacts?.directory || ''
           )}`
         )
@@ -124,6 +134,36 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
       setIsSearching(false);
     }
   };
+
+  // Debounced search to ensure 60fps ultra-smooth typing without lag
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchQuery.trim().length >= 2) {
+        handleSearch(undefined, symbolTypeFilter, searchQuery);
+      } else if (searchQuery.trim().length === 0) {
+        setSymbolResults([]);
+      }
+    }, 180);
+    return () => clearTimeout(timer);
+  }, [searchQuery, symbolTypeFilter, activeSource]);
+
+  // Desktop keyboard shortcuts: Ctrl+F to focus search, Esc to close inspector
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      }
+      if (e.key === 'Escape' && (selectedDll || selectedClass)) {
+        e.preventDefault();
+        setSelectedDll(null);
+        setSelectedClass(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedDll, selectedClass]);
 
   // Open DLL Inspector
   const handleOpenDll = async (dllName: string) => {
@@ -291,7 +331,7 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
                   ? 'text-ink-secondary hover:text-ink-primary cursor-pointer'
                   : 'text-ink-muted/40 cursor-not-allowed opacity-50'
               }`}
-              title={artifacts?.hasDumpV2 ? "Use dumpv2.cs (Includes full Hex-Rays method bodies)" : "Chưa có dumpv2.cs. Chạy script ida_export_dumpv2.py để tạo!"}
+              title={artifacts?.hasDumpV2 ? "Use dumpv2.cs (Includes full Hex-Rays method bodies)" : "dumpv2.cs not generated yet. Run ida_export_dumpv2.py in IDA to export!"}
             >
               <Sparkles className="w-3.5 h-3.5" />
               <span>dumpv2.cs (Hex-Rays)</span>
@@ -396,6 +436,7 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
               <input
                 type="text"
                 value={searchQuery}
+                ref={searchInputRef}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search symbol (e.g. SetVisible, radius, LobbyExtraCoinUI, HeroAvatarView)..."
                 className="control-input w-full pl-8 pr-3 py-1.5 text-xs font-mono"
@@ -768,7 +809,7 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
             </h3>
           </div>
           <span className="text-[11px] text-accent font-mono font-medium hidden sm:inline">
-            Tự động map tên hàm & struct vào libil2cpp.so
+            Auto-symbolize functions & inject structures into libil2cpp.so
           </span>
         </div>
 
@@ -777,20 +818,20 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
           <div className="p-3 rounded bg-app-subtle border border-app-border space-y-2">
             <div className="flex items-center gap-1.5 text-xs font-semibold text-accent">
               <Sparkles className="w-3.5 h-3.5" />
-              <span>HƯỚNG DẪN 3 BƯỚC MAP TÊN HÀM & STRUCT VÀO IDA PRO:</span>
+              <span>3-STEP GUIDE TO MAP NAMES & STRUCTS IN IDA PRO:</span>
             </div>
             <ol className="text-xs text-ink-secondary space-y-1.5 pl-4 list-decimal font-mono">
               <li>
-                <span className="font-semibold text-ink-primary">Mở libil2cpp.so</span> trong IDA Pro (chọn đúng ELF 64-bit hoặc 32-bit). Đợi IDA hoàn tất phân tích ban đầu (thanh trạng thái dưới đáy báo <code className="px-1 py-0.5 rounded bg-app-elevated border border-app-border text-accent">AU: idle</code>).
+                <span className="font-semibold text-ink-primary">Open libil2cpp.so</span> in IDA Pro (64-bit ARM64 ELF). Wait for initial auto-analysis to finish (bottom status bar shows <code className="px-1 py-0.5 rounded bg-app-elevated border border-app-border text-accent">AU: idle</code>).
               </li>
               <li>
-                Nhấn tổ hợp phím <kbd className="px-1.5 py-0.5 rounded bg-app-elevated border border-app-border text-ink-primary font-bold">Alt + F7</kbd> (hoặc vào menu <code className="text-ink-primary">File -&gt; Script file...</code>).
+                Press <kbd className="px-1.5 py-0.5 rounded bg-app-elevated border border-app-border text-ink-primary font-bold">Alt + F7</kbd> (or navigate to <code className="text-ink-primary">File -&gt; Script file...</code>).
               </li>
               <li>
-                Chọn file <span className="text-accent font-bold">ida_ultimate_il2cpp.py</span> (Tối thượng ⭐⭐⭐) hoặc <code className="text-ink-primary">ida_with_struct_py3.py</code> trong thư mục output để nạp struct, map tên hàm, gán kiểu this và inline toàn bộ String Xrefs!
+                Select <span className="text-accent font-bold">ida_ultimate_il2cpp.py</span> (Supreme Engine ⭐⭐⭐) or <code className="text-ink-primary">ida_with_struct_py3.py</code> in output folder to inject structures, rename methods, auto-cast this, and inline string literals.
               </li>
               <li>
-                Để xuất toàn bộ mã logic thân hàm C# vào file <span className="text-accent font-bold">dumpv2.cs</span>, chọn file <span className="text-accent font-bold">ida_export_dumpv2.py</span>. Script sẽ tự động dùng Hex-Rays decompile toàn bộ hàm trong dump.cs, làm sạch tên hàm trong IDA và xuất dumpv2.cs hoàn chỉnh!
+                To export all decompiled C# method bodies into <span className="text-accent font-bold">dumpv2.cs</span>, run <span className="text-accent font-bold">ida_export_dumpv2.py</span>. The script uses Hex-Rays to decompile methods from dump.cs, normalizes IDB names, and writes dumpv2.cs.
               </li>
             </ol>
           </div>
@@ -800,8 +841,8 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
             {[
               {
                 fileName: 'ida_ultimate_il2cpp.py',
-                title: 'IDA Pro Ultimate Engine (Tối thượng ⭐⭐⭐)',
-                desc: 'Đỉnh cao Decompiler: Fault-Tolerant Header Chunker, tự inline String Xrefs vào câu lệnh F5, Auto-Cast con trỏ this sang struct & lọc tham số rác MethodInfo.',
+                title: 'IDA Pro Ultimate Engine (Supreme ⭐⭐⭐)',
+                desc: 'Premier Decompiler: Fault-tolerant header chunker, inline string Xrefs in Hex-Rays F5, auto-cast this to struct & strip MethodInfo params.',
                 tag: 'Python 3 / IDA 7.x-9.x',
                 badge: 'Supreme ⚡',
                 isHot: true,
@@ -809,15 +850,15 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
               {
                 fileName: 'ida_export_dumpv2.py',
                 title: 'Export Full Method Bodies to dumpv2.cs (Hex-Rays 🚀)',
-                desc: 'Tự động decompile toàn bộ hàm trong dump.cs bằng IDA Hex-Rays, chuẩn hóa tên hàm trong database IDB và xuất ra file dumpv2.cs có đầy đủ thân hàm C#.',
+                desc: 'Automatically decompiles all functions in dump.cs via Hex-Rays, normalizes IDB names, and generates dumpv2.cs with full C# method bodies.',
                 tag: 'Python 3 / Hex-Rays F5',
                 badge: 'DumpV2 Engine ⚡',
                 isHot: true,
               },
               {
                 fileName: 'ida_with_struct_py3.py',
-                title: 'IDA Pro with Structs (Khuyên dùng ⭐)',
-                desc: 'Đọc script.json & nạp il2cpp.h vào IDA Type Engine. Tự động đổi tên toàn bộ hàm, ép kiểu tham số, gán struct và string literals.',
+                title: 'IDA Pro with Structs (Standard Recommended ⭐)',
+                desc: 'Parses script.json & loads il2cpp.h into IDA Type Engine. Auto-renames methods, parameter types, structs, and string literals.',
                 tag: 'Python 3 / IDA 7.x-9.x',
                 badge: 'Recommended ⭐',
                 isHot: false,
@@ -825,7 +866,7 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
               {
                 fileName: 'ida_py3.py',
                 title: 'IDA Pro Basic Script',
-                desc: 'Đổi tên hàm và chuỗi nhanh chóng từ script.json (dành cho trường hợp không cần nạp struct C hoặc binary có định nghĩa xung đột).',
+                desc: 'Quickly renames methods and strings from script.json without requiring C structs.',
                 tag: 'Python 3 / IDA 7.x-9.x',
                 badge: 'Standard',
                 isHot: false,
@@ -833,7 +874,7 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
               {
                 fileName: 'ghidra_with_struct.py',
                 title: 'Ghidra with Structs',
-                desc: 'Nạp cấu trúc struct từ il2cpp.h và map symbol từ script.json vào dự án Ghidra 10.x / 11.x.',
+                desc: 'Imports struct definitions from il2cpp.h and maps symbols from script.json into Ghidra 10.x / 11.x.',
                 tag: 'Ghidra Script',
                 badge: 'Ghidra',
                 isHot: false,
@@ -869,7 +910,7 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
 
                     <p className="text-[11px] text-ink-secondary leading-relaxed">{script.desc}</p>
                     <div className="text-[10px] font-mono text-ink-muted">
-                      {matched ? `Kích thước: ${formatBytes(matched.size)}` : 'Sẵn sàng trong thư mục output'}
+                      {matched ? `Size: ${formatBytes(matched.size)}` : 'Ready in output folder'}
                     </div>
                   </div>
 
@@ -894,7 +935,7 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
                     <button
                       onClick={onOpenFolder}
                       className="btn-secondary-action px-2 py-1 text-xs flex items-center gap-1 cursor-pointer font-medium"
-                      title="Mở thư mục chứa file"
+                      title="Open enclosing folder"
                     >
                       <FolderOpen className="w-3 h-3 text-accent" />
                     </button>
@@ -906,34 +947,48 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
         </div>
       </section>
 
-      {/* FULL-SCREEN WORKSTATION MODAL: DLL ASSEMBLY & CLASS INSPECTOR */}
+      {/* FULL-WINDOW DOCKED ASSEMBLY & CLASS INSPECTOR (VS Code / dnSpy desktop view) */}
       {(selectedDll || selectedClass) && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-3 sm:p-6 backdrop-blur-sm">
-          <div className="w-full max-w-7xl h-[92vh] bg-app-workspace border border-app-border rounded-lg flex flex-col overflow-hidden shadow-2xl">
-            {/* Modal Top Bar */}
-            <div className="px-4 py-2.5 bg-app-elevated border-b border-app-border flex items-center justify-between">
+        <div className="fixed inset-0 z-50 bg-[#121416] flex flex-col overflow-hidden select-none">
+          <div className="w-full h-full bg-[#17191C] flex flex-col overflow-hidden">
+            {/* Desktop Command Bar */}
+            <div className="h-9 px-3 bg-[#151719] border-b border-[#2C3236] flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2.5 overflow-hidden">
-                <Box className="w-4 h-4 text-accent shrink-0" />
-                <span className="text-xs font-mono font-semibold uppercase tracking-wider text-ink-primary truncate">
-                  Assembly Inspector: {selectedDll || selectedClass?.meta.dll || 'Symbol Explorer'}
-                </span>
-                {dllClasses.length > 0 && (
-                  <span className="text-[11px] font-mono text-ink-muted bg-app-bg px-2 py-0.5 rounded border border-app-border shrink-0">
-                    {dllClasses.length} Types
-                  </span>
-                )}
+                <Box className="w-4 h-4 text-[#C49B66] shrink-0" />
+                <div className="flex items-center gap-1.5 text-xs font-mono text-[#E6E8E6] truncate">
+                  <span className="text-[#9FA6A2]">Assembly:</span>
+                  <span className="font-semibold text-[#C49B66]">{selectedDll || selectedClass?.meta.dll || 'Symbol Explorer'}</span>
+                  {selectedClass && (
+                    <>
+                      <span className="text-[#676E6A]">›</span>
+                      <span className="text-[#9FA6A2]">Class:</span>
+                      <span className="font-semibold text-[#E6E8E6]">{selectedClass.meta.name}</span>
+                      <span className="text-[10px] text-[#676E6A] bg-[#121416] px-1.5 py-0.2 rounded border border-[#2C3236]">
+                        TypeDef: {selectedClass.meta.typeDefIndex}
+                      </span>
+                    </>
+                  )}
+                  {dllClasses.length > 0 && (
+                    <span className="text-[11px] font-mono text-[#9FA6A2] bg-[#121416] px-2 py-0.5 rounded border border-[#2C3236] shrink-0 ml-1">
+                      {dllClasses.length} Types
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div className="flex items-center gap-2">
                 <button
+                  type="button"
                   onClick={() => {
                     setSelectedDll(null);
                     setSelectedClass(null);
                   }}
-                  className="p-1.5 rounded text-ink-muted hover:text-ink-primary hover:bg-app-bg transition-colors cursor-pointer"
-                  title="Close Inspector"
+                  className="btn-secondary-action px-2.5 py-1 text-xs flex items-center gap-1.5 cursor-default font-mono"
+                  title="Close Inspector (Esc)"
                 >
-                  <X className="w-4 h-4" />
+                  <span>Close</span>
+                  <kbd className="text-[10px] bg-[#121416] px-1 py-0.2 rounded border border-[#2C3236] text-[#676E6A]">Esc</kbd>
+                  <X className="w-3.5 h-3.5 text-[#9FA6A2]" />
                 </button>
               </div>
             </div>
@@ -1036,7 +1091,7 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
                             href={apiUrl(`/api/export-class-cs?typeDefIndex=${selectedClass.meta.typeDefIndex}&source=${activeSource}&beautify=true&dir=${encodeURIComponent(artifacts?.directory || '')}`)}
                             download={`${selectedClass.meta.name}.cs`}
                             className="btn-secondary-action px-2.5 py-1 text-xs flex items-center gap-1.5 cursor-pointer font-mono text-accent hover:border-accent"
-                            title="Tải riêng class này thành file .cs hoàn chỉnh"
+                            title="Download this class as standalone .cs file"
                           >
                             <Download className="w-3 h-3" />
                             <span>Export .cs</span>

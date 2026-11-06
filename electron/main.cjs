@@ -32,7 +32,26 @@ function createWindow(port) {
       nodeIntegration: false,
       contextIsolation: true,
       webSecurity: false,
+      spellcheck: false,
     },
+  });
+
+  // Native desktop app experience hardening
+  mainWindow.webContents.on('context-menu', (e) => {
+    // Prevent Chromium default web context menu
+    e.preventDefault();
+  });
+
+  mainWindow.webContents.on('will-navigate', (e) => {
+    // Prevent navigating away when dropping files
+    e.preventDefault();
+  });
+
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    // Block accidental web reload shortcuts that erase workstation state
+    if (((input.control || input.meta) && input.key.toLowerCase() === 'r') || input.key === 'F5') {
+      event.preventDefault();
+    }
   });
 
   // Guarantee window is shown
@@ -127,4 +146,27 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+// Window Control IPC handlers
+ipcMain.handle('window:minimize', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.minimize();
+});
+
+ipcMain.handle('window:maximize', () => {
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  if (mainWindow.isMaximized()) {
+    mainWindow.unmaximize();
+  } else {
+    mainWindow.maximize();
+  }
+  return mainWindow.isMaximized();
+});
+
+ipcMain.handle('window:close', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close();
+});
+
+ipcMain.handle('window:is-maximized', () => {
+  return (mainWindow && !mainWindow.isDestroyed()) ? mainWindow.isMaximized() : false;
 });

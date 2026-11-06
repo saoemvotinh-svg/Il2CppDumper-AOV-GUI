@@ -4,117 +4,178 @@
 
 :root {
   color-scheme: dark;
-  --bg-app: #151719;
-  --bg-workspace: #1D2022;
-  --bg-elevated: #24282B;
-  --border-rule: #34393C;
-  --text-primary: #E4E5E2;
-  --text-secondary: #9AA19E;
-  --accent: #AE8957;
-  --status-ready: #7F9D8B;
-  --status-warning: #D1A567;
-  --status-error: #CB7775;
+  --bg-app: #121416;
+  --bg-workspace: #17191C;
+  --bg-elevated: #1F2326;
+  --bg-hover: #262B2E;
+  --border-rule: #2C3236;
+  --text-primary: #E6E8E6;
+  --text-secondary: #9FA6A2;
+  --text-muted: #676E6A;
+  --accent: #C49B66;
+  --accent-hover: #D4AB76;
+  --status-ready: #6E9B7B;
+  --status-warning: #D9A84E;
+  --status-error: #D96563;
 }
 
-body {
+/* Native Desktop Root Ergonomics - Zero Webview Artifacts */
+html, body, #root {
+  height: 100%;
+  width: 100%;
   margin: 0;
+  padding: 0;
+  overflow: hidden;
   background-color: var(--bg-app);
   color: var(--text-primary);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  overflow-x: hidden;
+  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Inter, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  user-select: text;
-  -webkit-user-select: text;
-}
-
-/* Universal text selectability */
-p, span, div, pre, code, td, th, li, h1, h2, h3, h4, h5, h6, input {
-  user-select: text;
-  -webkit-user-select: text;
-}
-
-button, svg, [role="button"] {
+  text-rendering: optimizeLegibility;
   user-select: none;
   -webkit-user-select: none;
+  -webkit-user-drag: none;
+  cursor: default;
+  overscroll-behavior: none;
 }
 
-/* Industrial Precision Scrollbars */
+/* Explicit Selectable Regions (Code, Logs, Inputs, RVA chips) */
+.selectable-text,
+pre,
+code,
+input,
+textarea,
+.code-container,
+.terminal-log-content {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  cursor: text;
+}
+
+/* Desktop App Window Drag Regions */
+.titlebar-drag {
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.titlebar-no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Native High-Precision Desktop Scrollbars */
 ::-webkit-scrollbar {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #181A1C;
+  background: #141618;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #2D3236;
+  background: #282C30;
   border-radius: 2px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #3E4449;
+  background: #3D444A;
 }
 
-/* Custom Text Selection - Industrial Bronze */
+::-webkit-scrollbar-corner {
+  background: #141618;
+}
+
+/* Custom Text Selection - Industrial Engineering Bronze */
 ::selection {
-  background-color: #AE8957;
-  color: #151719;
+  background-color: #C49B66;
+  color: #121416;
 }
 
-/* Desktop Engineering Panel Framing */
+/* Desktop Engineering Panel Framing (IDE / Disassembler Style) */
 .panel-frame {
-  background-color: #1D2022;
-  border: 1px solid #34393C;
-  border-radius: 4px;
+  background-color: var(--bg-workspace);
+  border: 1px solid var(--border-rule);
+  border-radius: 3px;
 }
 
 .panel-header {
-  background-color: #1A1C1E;
-  border-bottom: 1px solid #34393C;
-  padding: 8px 12px;
+  background-color: #151719;
+  border-bottom: 1px solid var(--border-rule);
+  padding: 6px 10px;
 }
 
 .control-input {
-  background-color: #24282B;
-  border: 1px solid #34393C;
-  border-radius: 4px;
-  color: #E4E5E2;
-  transition: border-color 0.15s ease;
+  background-color: #1B1E21;
+  border: 1px solid var(--border-rule);
+  border-radius: 3px;
+  color: var(--text-primary);
+  transition: border-color 0.08s ease;
 }
 
 .control-input:focus {
   outline: none;
-  border-color: #AE8957;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(196, 155, 102, 0.35);
 }
 
+/* Snappy Desktop Actions (Zero Slow Web Transitions) */
 .btn-primary-action {
-  background-color: #AE8957;
-  color: #151719;
+  background-color: var(--accent);
+  color: #121416;
   font-weight: 600;
-  border-radius: 4px;
-  transition: background-color 0.15s ease;
+  border-radius: 3px;
+  border: 1px solid transparent;
+  transition: background-color 0.06s ease;
+  cursor: default;
 }
 
 .btn-primary-action:hover {
-  background-color: #BD9763;
+  background-color: var(--accent-hover);
 }
 
 .btn-primary-action:active {
-  background-color: #987547;
+  background-color: #A37F4F;
+  transform: translateY(1px);
 }
 
 .btn-secondary-action {
-  background-color: #24282B;
-  color: #E4E5E2;
-  border: 1px solid #34393C;
-  border-radius: 4px;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  background-color: #1F2326;
+  color: var(--text-primary);
+  border: 1px solid var(--border-rule);
+  border-radius: 3px;
+  transition: background-color 0.06s ease, border-color 0.06s ease;
+  cursor: default;
 }
 
 .btn-secondary-action:hover {
-  background-color: #2C3135;
-  border-color: #454B50;
+  background-color: #262B2F;
+  border-color: #40474D;
+}
+
+.btn-secondary-action:active {
+  background-color: #1A1D20;
+  transform: translateY(1px);
+}
+
+/* Desktop Window Caption Button */
+.caption-btn {
+  width: 38px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  transition: background-color 0.05s ease, color 0.05s ease;
+  cursor: default;
+  -webkit-app-region: no-drag;
+}
+
+.caption-btn:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+  color: #FFFFFF;
+}
+
+.caption-btn-close:hover {
+  background-color: #E81123 !important;
+  color: #FFFFFF !important;
 }

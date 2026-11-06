@@ -168,7 +168,7 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({
                 className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors flex items-center gap-1 cursor-pointer ${
                   viewMode === 'clean' ? 'bg-accent text-white shadow-sm' : 'text-ink-secondary hover:text-ink-primary'
                 }`}
-                title="Mã C# giả lập sạch (Đã chuyển đổi con trỏ và unwrap string)"
+                title="Clean reconstructed C# pseudocode (unwrapped structs, dereferenced pointers, string literals)"
               >
                 <Sparkles className="w-3 h-3" />
                 <span>Clean C# Pseudo</span>
@@ -178,7 +178,7 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({
                 className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors flex items-center gap-1 cursor-pointer ${
                   viewMode === 'raw' ? 'bg-app-elevated text-ink-primary' : 'text-ink-secondary hover:text-ink-primary'
                 }`}
-                title="Mã Hex-Rays C Pseudocode nguyên bản (Pointer, thanh ghi, offset)"
+                title="Raw Hex-Rays C pseudocode (raw registers, pointer offsets, call sites)"
               >
                 <Eye className="w-3 h-3" />
                 <span>Raw Hex-Rays C</span>

@@ -1,5 +1,5 @@
-import React from 'react';
-import { Cpu, Terminal, Layers, Wrench } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Cpu, Terminal, Layers, Wrench, Minus, Square, Copy, X } from 'lucide-react';
 
 interface HeaderProps {
   activeTab: 'dump' | 'artifacts' | 'fix-metadata';
@@ -14,80 +14,146 @@ export const Header: React.FC<HeaderProps> = ({
   isRunning,
   totalDlls = 89,
 }) => {
+  const [isMaximized, setIsMaximized] = useState(false);
+  const isElectron = Boolean(window.electronAPI?.isElectron);
+
+  useEffect(() => {
+    if (window.electronAPI?.isMaximized) {
+      window.electronAPI.isMaximized().then(setIsMaximized).catch(() => {});
+    }
+  }, []);
+
+  const handleMinimize = () => {
+    window.electronAPI?.minimizeWindow?.();
+  };
+
+  const handleMaximize = async () => {
+    if (window.electronAPI?.maximizeWindow) {
+      const maximized = await window.electronAPI.maximizeWindow();
+      setIsMaximized(maximized);
+    }
+  };
+
+  const handleClose = () => {
+    window.electronAPI?.closeWindow?.();
+  };
+
   return (
-    <header className="border-b border-app-border bg-app-panel select-none">
-      <div className="max-w-7xl mx-auto px-4 py-2.5 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
-        {/* Workstation Brand & Diagnostic Readout */}
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded bg-app-elevated border border-app-border flex items-center justify-center text-accent">
-            <Cpu className="w-4 h-4" />
+    <header className="border-b border-[#2C3236] bg-[#141618] select-none shrink-0 z-30">
+      {/* Top Title Bar with Window Drag & Controls */}
+      <div className="titlebar-drag flex items-center justify-between h-9 px-3">
+        {/* Left: App Identity & Architecture Telemetry */}
+        <div className="flex items-center gap-2.5 titlebar-no-drag">
+          <div className="w-5 h-5 rounded bg-[#1F2326] border border-[#2C3236] flex items-center justify-center text-accent">
+            <Cpu className="w-3 h-3 text-[#C49B66]" />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-sm tracking-wide text-ink-primary">
-                Il2CppDumper
-              </span>
-              <span className="text-[11px] font-mono px-1.5 py-0.2 rounded bg-app-elevated text-ink-secondary border border-app-border">
-                v6.8-release
-              </span>
-            </div>
-            <div className="text-[11px] text-ink-secondary flex items-center gap-2 mt-0.5 font-mono">
-              <span>Target: ARM64</span>
-              <span className="text-ink-muted">•</span>
-              <span>Metadata v29</span>
-              <span className="text-ink-muted">•</span>
-              <span className="text-ink-secondary">Tencent XOR Active</span>
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-xs tracking-wide text-[#E6E8E6]">
+              IL2CPPDUMPER WORKSTATION PRO
+            </span>
+            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[#1F2326] text-[#9FA6A2] border border-[#2C3236]">
+              v6.8
+            </span>
+            <div className="hidden lg:flex items-center gap-1.5 text-[10px] font-mono text-[#676E6A]">
+              <span>[ARM64-v8a</span>
+              <span>•</span>
+              <span>Meta v29 EA/FA</span>
+              <span>•</span>
+              <span className="text-[#6E9B7B]">XOR 0x69696969]</span>
             </div>
           </div>
         </div>
 
-        {/* Workstation Mode Switcher (Industrial Segmented Control) */}
-        <nav className="flex items-center border border-app-border rounded bg-app-workspace p-0.5 text-xs">
+        {/* Center: Workstation Tab Strip (Visual Studio / IDA Pro dense dock style) */}
+        <nav className="titlebar-no-drag flex items-center border border-[#2C3236] rounded bg-[#17191C] p-0.5 text-xs">
           <button
+            type="button"
             onClick={() => setActiveTab('dump')}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-sm font-medium transition-colors cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-[2px] font-medium transition-colors cursor-default ${
               activeTab === 'dump'
-                ? 'bg-app-elevated text-ink-primary border-b-2 border-accent shadow-sm'
-                : 'text-ink-secondary hover:text-ink-primary hover:bg-app-elevated/50 border-b-2 border-transparent'
+                ? 'bg-[#1F2326] text-[#E6E8E6] border-b border-[#C49B66] shadow-sm'
+                : 'text-[#9FA6A2] hover:text-[#E6E8E6] hover:bg-[#1F2326]/50 border-b border-transparent'
             }`}
           >
-            <Terminal className="w-3.5 h-3.5 text-ink-secondary" />
+            <Terminal className="w-3.5 h-3.5 text-[#9FA6A2]" />
             <span>Execution Pipeline</span>
             {isRunning && (
-              <span className="w-2 h-2 rounded-full bg-status-warning animate-pulse" />
+              <span className="w-1.5 h-1.5 rounded-full bg-[#D9A84E] animate-ping" />
             )}
           </button>
 
           <button
+            type="button"
             onClick={() => setActiveTab('artifacts')}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-sm font-medium transition-colors cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-[2px] font-medium transition-colors cursor-default ${
               activeTab === 'artifacts'
-                ? 'bg-app-elevated text-ink-primary border-b-2 border-accent shadow-sm'
-                : 'text-ink-secondary hover:text-ink-primary hover:bg-app-elevated/50 border-b-2 border-transparent'
+                ? 'bg-[#1F2326] text-[#E6E8E6] border-b border-[#C49B66] shadow-sm'
+                : 'text-[#9FA6A2] hover:text-[#E6E8E6] hover:bg-[#1F2326]/50 border-b border-transparent'
             }`}
           >
-            <Layers className="w-3.5 h-3.5 text-ink-secondary" />
+            <Layers className="w-3.5 h-3.5 text-[#9FA6A2]" />
             <span>Artifact Explorer</span>
-            <span className="px-1.5 py-0.2 rounded bg-app-workspace border border-app-border text-[10px] font-mono text-ink-secondary">
+            <span className="px-1.5 py-0.2 rounded bg-[#121416] border border-[#2C3236] text-[10px] font-mono text-[#9FA6A2]">
               {totalDlls}
             </span>
           </button>
 
           <button
+            type="button"
             onClick={() => setActiveTab('fix-metadata')}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-sm font-medium transition-colors cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-[2px] font-medium transition-colors cursor-default ${
               activeTab === 'fix-metadata'
-                ? 'bg-app-elevated text-ink-primary border-b-2 border-accent shadow-sm'
-                : 'text-ink-secondary hover:text-ink-primary hover:bg-app-elevated/50 border-b-2 border-transparent'
+                ? 'bg-[#1F2326] text-[#E6E8E6] border-b border-[#C49B66] shadow-sm'
+                : 'text-[#9FA6A2] hover:text-[#E6E8E6] hover:bg-[#1F2326]/50 border-b border-transparent'
             }`}
           >
-            <Wrench className="w-3.5 h-3.5 text-accent" />
+            <Wrench className="w-3.5 h-3.5 text-[#C49B66]" />
             <span>Fix Metadata</span>
-            <span className="px-1.5 py-0.2 rounded bg-accent/15 border border-accent/30 text-[10px] font-mono text-accent font-semibold">
+            <span className="px-1.5 py-0.2 rounded bg-[#C49B66]/15 border border-[#C49B66]/30 text-[10px] font-mono text-[#C49B66] font-semibold">
               EA→FA v29
             </span>
           </button>
         </nav>
+
+        {/* Right: Window Control Caption Buttons (in Electron) or System Status */}
+        <div className="flex items-center gap-1 titlebar-no-drag">
+          {isElectron ? (
+            <div className="flex items-center -mr-2">
+              <button
+                type="button"
+                onClick={handleMinimize}
+                className="caption-btn"
+                title="Minimize Window"
+              >
+                <Minus className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={handleMaximize}
+                className="caption-btn"
+                title={isMaximized ? "Restore Down" : "Maximize Window"}
+              >
+                {isMaximized ? (
+                  <Copy className="w-3 h-3 rotate-180" />
+                ) : (
+                  <Square className="w-3 h-3" />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={handleClose}
+                className="caption-btn caption-btn-close"
+                title="Close"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <div className="text-[11px] font-mono text-[#676E6A]">
+              <span>Desktop Bridge Active</span>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );
