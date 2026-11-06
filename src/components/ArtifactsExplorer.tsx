@@ -636,13 +636,16 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
                 Nhấn tổ hợp phím <kbd className="px-1.5 py-0.5 rounded bg-app-elevated border border-app-border text-ink-primary font-bold">Alt + F7</kbd> (hoặc vào menu <code className="text-ink-primary">File -&gt; Script file...</code>).
               </li>
               <li>
-                Chọn file <span className="text-accent font-bold">ida_ultimate_il2cpp.py</span> (Tối thượng ⭐⭐⭐) hoặc <code className="text-ink-primary">ida_with_struct_py3.py</code> trong thư mục output bên dưới. Script sẽ tự động nhận diện <code className="text-ink-primary">script.json</code> & <code className="text-ink-primary">il2cpp.h</code>, tự động nạp struct, map tên hàm, gán kiểu this và inline toàn bộ String Xrefs!
+                Chọn file <span className="text-accent font-bold">ida_ultimate_il2cpp.py</span> (Tối thượng ⭐⭐⭐) hoặc <code className="text-ink-primary">ida_with_struct_py3.py</code> trong thư mục output để nạp struct, map tên hàm, gán kiểu this và inline toàn bộ String Xrefs!
+              </li>
+              <li>
+                Để xuất toàn bộ mã logic thân hàm C# vào file <span className="text-accent font-bold">dumpv2.cs</span>, chọn file <span className="text-accent font-bold">ida_export_dumpv2.py</span>. Script sẽ tự động dùng Hex-Rays decompile toàn bộ hàm trong dump.cs, làm sạch tên hàm trong IDA và xuất dumpv2.cs hoàn chỉnh!
               </li>
             </ol>
           </div>
 
           {/* Script Cards Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
             {[
               {
                 fileName: 'ida_ultimate_il2cpp.py',
@@ -650,6 +653,14 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
                 desc: 'Đỉnh cao Decompiler: Fault-Tolerant Header Chunker, tự inline String Xrefs vào câu lệnh F5, Auto-Cast con trỏ this sang struct & lọc tham số rác MethodInfo.',
                 tag: 'Python 3 / IDA 7.x-9.x',
                 badge: 'Supreme ⚡',
+                isHot: true,
+              },
+              {
+                fileName: 'ida_export_dumpv2.py',
+                title: 'Xuất Full Thân Hàm dumpv2.cs (Hex-Rays 🚀)',
+                desc: 'Tự động decompile toàn bộ hàm trong dump.cs bằng IDA Hex-Rays, chuẩn hóa tên hàm trong database IDB và xuất ra file dumpv2.cs có đầy đủ thân hàm C#.',
+                tag: 'Python 3 / Hex-Rays F5',
+                badge: 'DumpV2 Engine ⚡',
                 isHot: true,
               },
               {

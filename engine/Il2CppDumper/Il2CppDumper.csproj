@@ -52,6 +52,9 @@
     <None Update="ida_with_struct.py">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Update="ida_export_dumpv2.py">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Update="ida_ultimate_il2cpp.py">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

@@ -21,6 +21,7 @@ Kho mã nguồn hợp nhất toàn diện bao gồm **C# .NET 8 Core Engine** v�
    - [Quy trình 1: Phân tích & Decompile thông thường](#quy-trình-1-phân-tích--decompile-thông-thường)
    - [Quy trình 2: Khôi phục Header Metadata bằng Tab "Fix Metadata"](#quy-trình-2-khôi-phục-header-metadata-bằng-tab-fix-metadata)
    - [Quy trình 3: Map Tên Hàm & Struct vào IDA Pro (Khuyên dùng Tối thượng ⭐⭐⭐)](#quy-trình-3-map-tên-hàm--struct-vào-ida-pro-khuyên-dùng-tối-thượng-)
+   - [Quy trình 4: Xuất Full Thân Hàm Logic vào dumpv2.cs với IDA Pro (Hex-Rays 🚀)](#quy-trình-4-xuất-full-thân-hàm-logic-vào-dumpv2cs-với-ida-pro-hex-rays-)
 6. [So sánh chất lượng Decompile trong IDA Pro](#-so-sánh-chất-lượng-decompile-trong-ida-pro)
 7. [Hướng dẫn biên dịch từ Source (Build from Source)](#-hướng-dẫn-biên-dịch-từ-source-build-from-source)
 8. [Tuyên bố miễn trừ trách nhiệm (Disclaimer)](#-tuyên-bố-miễn-trừ-trách-nhiệm-disclaimer)
@@ -58,6 +59,12 @@ Kho mã nguồn hợp nhất toàn diện bao gồm **C# .NET 8 Core Engine** v�
   - **Deep Call-Site String Inlining:** Quét toàn bộ Xrefs trỏ tới String literal và chèn comment trực tiếp vào từng dòng lệnh gọi trong code ASM và cửa sổ F5 Decompile.
   - **Auto-Cast `this` & Field Resolver:** Tự động nhận diện và gán kiểu Struct cho con trỏ `this` (param 0), biến các lệnh offset thô `*(a1 + 0x18)` thành mã giả C# sạch sẽ `this->fields.m_isVisible`.
   - **Metadata TypeInfo Resolver & Clean CTree:** Tự động giải mã TypeInfo cho các đối tượng mới tạo và lọc dọn tham số rác `const MethodInfo* method`.
+- **`ida_export_dumpv2.py` (Trích xuất Full Thân Hàm Decompile vào `dumpv2.cs` 🚀):**
+  - **Tự động chuẩn hóa Symbol & Types:** Tự động sửa tên hàm, chữ ký và tham số trong IDA Pro theo `script.json` để mã giả dễ đọc nhất.
+  - **Hex-Rays Decompile Toàn Bộ:** Gọi decompiler tự động quét và decompile tất cả các hàm có thực thi (RVA hợp lệ), bóc tách chữ ký hàm thừa để lấy thân logic thuần túy.
+  - **Deep Call-Site String Inlining:** Nhúng trực tiếp chuỗi ký tự (String Literals) vào từng dòng lệnh decompile.
+  - **Ghép Thân Hàm vào `dumpv2.cs`:** Đọc cấu trúc gốc từ `dump.cs`, thay thế toàn bộ thân rỗng `{ }` bằng mã nguồn C# giả lập hoàn chỉnh.
+  - **Chống Tràn RAM (Cache Flushing):** Tự động dọn dẹp bộ đệm Hex-Rays (`clear_cached_cfuncs()`) và Garbage Collector định kỳ, xử lý mượt mà game khổng lồ >320.000 methods.
 - **`ida_with_struct_py3.py` (Tiêu chuẩn ⭐):**
   - Đọc trực tiếp `script.json` và nạp toàn bộ cấu trúc C struct từ `il2cpp.h` vào IDA Type Engine.
   - Tự động nhận diện file `script.json` và `il2cpp.h` ở cùng thư mục, không hiện popup hỏi file.
@@ -119,6 +126,7 @@ Il2CppDumper-AOV-GUI/
 │       ├── Il2Cpp/           # Thuật toán phân tích metadata & Tencent XOR Decryption
 │       ├── Outputs/          # Bộ xuất dump.cs, dummy DLLs, script Ghidra/IDA
 │       ├── ida_ultimate_il2cpp.py # Script map IDA Pro tối thượng (Fault-Tolerant, String Inlining, Auto-Cast this)
+│       ├── ida_export_dumpv2.py   # Script trích xuất full thân hàm Decompile vào dumpv2.cs
 │       ├── ida_with_struct_py3.py # Script map IDA Pro tiêu chuẩn
 │       ├── ida_py3.py        # Script IDA Pro cơ bản
 │       ├── ghidra_with_struct.py  # Script Ghidra nạp struct
@@ -219,6 +227,58 @@ Sau khi decompile xong, để `libil2cpp.so` trong IDA Pro hiển thị đầy �
      [Il2CppDumper] Done mapping 45210 methods!
      ```
    - Toàn bộ hàm, chuỗi ký tự và kiểu dữ liệu trong IDA sẽ được đổi tên và gán struct chính xác 100%!
+
+---
+
+### Quy trình 4: Xuất Full Thân Hàm Logic vào `dumpv2.cs` với IDA Pro (Hex-Rays 🚀)
+
+File `dump.cs` thông thường chỉ chứa khai báo chữ ký hàm với thân rỗng `{ }`. Để có toàn bộ mã logic thực thi bên trong từng hàm, sử dụng script `ida_export_dumpv2.py`:
+
+1. **Chuẩn bị file:**
+   - Đảm bảo trong thư mục output đã có `dump.cs` và `script.json`.
+   - File `libil2cpp.so` đã được mở và hoàn tất phân tích trong IDA Pro (`AU: idle`).
+2. **Khởi chạy script:**
+   - Trong IDA Pro, nhấn tổ hợp phím **`Alt + F7`** (hoặc `File` -> `Script file...`).
+   - Chọn file **`ida_export_dumpv2.py`** trong thư mục output (hoặc copy từ tab Artifact Explorer).
+3. **Tiến trình xử lý:**
+   - Script tự động chuẩn hóa tên hàm trong database IDA (`Namespace.Class$$Method`).
+   - Tiến hành decompile từng hàm bằng Hex-Rays Decompiler, inline chuỗi ký tự, làm sạch thụt lề và ghi trực tiếp vào `dumpv2.cs`.
+   - Tiến trình được hiển thị trực tiếp trên thanh tác vụ IDA và console:
+     ```text
+     [Il2CppDumper] Loaded 324150 methods from script.json
+     [Il2CppDumper] Generating dumpv2.cs with full decompiled bodies...
+     [Il2CppDumper] Progress: 1000/324150 methods (0.3%)...
+     ...
+     [Il2CppDumper] [SUCCESS] Completed dumpv2.cs! Total methods decompiled: 324150
+     ```
+4. **Kết quả đạt được trong `dumpv2.cs`:**
+
+```csharp
+// TRƯỚC (dump.cs - Thân rỗng):
+// RVA: 0x77A79F0 Offset: 0x77A39F0 VA: 0x77A79F0
+public bool IsHeroVisible(int heroId) { }
+
+// SAU (dumpv2.cs - Đầy đủ thân hàm Decompile từ IDA Pro):
+// RVA: 0x77A79F0 Offset: 0x77A39F0 VA: 0x77A79F0
+public bool IsHeroVisible(int heroId)
+{
+	HeroManager_o *heroMgr;
+	HeroData_o *data;
+
+	heroMgr = this->fields.m_heroManager;
+	if ( heroMgr )
+	{
+		data = HeroManager__GetHeroData(heroMgr, heroId);
+		if ( data && data->fields.m_isActive )
+		{
+			// StringLiteral_1523: "Hero is currently visible on battlefield"
+			LogUtils__LogInfo(StringLiteral_1523 /* "Hero is currently visible on battlefield" */);
+			return true;
+		}
+	}
+	return false;
+}
+```
 
 ---
 
