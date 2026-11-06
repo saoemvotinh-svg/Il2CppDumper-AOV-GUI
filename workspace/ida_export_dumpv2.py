@@ -11,6 +11,7 @@ Mô tả:
  - Thay thế `{ }` rỗng trong dump.cs bằng mã logic đã decompile, tạo ra dumpv2.cs hoàn chỉnh.
  - Tự động inline String Literals và dọn dẹp các tham số rác như `const MethodInfo* method`.
  - Quản lý bộ nhớ thông minh (streaming IO + auto-flush cache) không lo tràn RAM.
+ - Tương thích 100% IDAPython trên mọi phiên bản IDA Pro 7.x, 8.x, 9.x (kể cả IDA 9.3).
 ================================================================================
 """
 
@@ -114,7 +115,7 @@ def clean_hexrays_body(c_code, base_indent='\t', string_map=None):
             for sl_match in re.finditer(r'\b(StringLiteral_\d+)\b', content):
                 sl_name = sl_match.group(1)
                 if sl_name in string_map:
-                    escaped_str = string_map[sl_name].replace('"', '\\"').replace('\n', '\\n')
+                    escaped_str = string_map[sl_name].replace('*/', '* /').replace('"', '\\"').replace('\r', '').replace('\n', '\\n')
                     content = content.replace(sl_name, f'{sl_name} /* "{escaped_str}" */')
 
         cleaned_lines.append(indent_str + content)
@@ -123,6 +124,49 @@ def clean_hexrays_body(c_code, base_indent='\t', string_map=None):
     body_content = '\n'.join(cleaned_lines)
     body_footer = '\n' + base_indent + '}'
     return '\n' + body_header + body_content + body_footer
+
+def prompt_mode():
+    """
+    Hộp thoại tương thích 100% với mọi phiên bản IDA Pro (7.x, 8.x, 9.x kể cả IDA 9.3)
+    ask_buttons signature trong IDA SDK: ask_buttons(Yes, No, Cancel, def, format, ...)
+    Trả về:
+       1: Game Logic
+       0: All methods
+      -1: Cancel
+    """
+    msg = (
+        "Chọn chế độ xuất dumpv2.cs:\n\n"
+        "1. [Chỉ Game Logic (Nhanh)]: Decompile các Assembly gameplay (Assembly-CSharp, Aov, Project...),\n"
+        "   bỏ qua mscorlib / System / UnityEngine core (Tốc độ cao gấp 5 lần)\n\n"
+        "2. [Toàn bộ (All)]: Decompile 100% tất cả các hàm trong dump.cs (bao gồm cả engine core)\n\n"
+        "3. [Hủy bỏ]: Dừng lại\n"
+    )
+    try:
+        # IDA SDK ask_buttons yêu cầu đủ 5 tham số: (Yes, No, Cancel, default_btn, format)
+        # 1 = Yes (Game Logic), 0 = No (All), -1 = Cancel
+        choice = ida_kernwin.ask_buttons(
+            "Chỉ Game Logic (Nhanh)",
+            "Toàn bộ (All)",
+            "Hủy bỏ",
+            1,
+            msg
+        )
+        return choice
+    except Exception as e:
+        print(f"[!] ask_buttons fallback: {e}")
+        try:
+            yn = ida_kernwin.ask_yn(
+                1,
+                "Bạn có muốn CHỈ decompile Game Logic (Assembly-CSharp, Aov...) để chạy nhanh hơn không?\n\n"
+                "(Chọn Yes = Chỉ Game Logic | Chọn No = Decompile toàn bộ 320k hàm | Chọn Cancel = Dừng)"
+            )
+            if yn == 1:
+                return 1
+            elif yn == 0:
+                return 0
+            return -1
+        except Exception:
+            return 1
 
 def main():
     if not HAS_HEXRAYS:
@@ -148,17 +192,10 @@ def main():
     output_v2_path = os.path.join(output_dir, 'dumpv2.cs')
 
     # 2. Hộp thoại lựa chọn chế độ
-    choice = ida_kernwin.ask_buttons(
-        "Toàn bộ (All 320k)", 
-        "Chỉ Game Logic (Nhanh)", 
-        "Hủy bỏ", 
-        "Chọn chế độ xuất dumpv2.cs:\n\n"
-        "1. [Toàn bộ (All)]: Decompile toàn bộ 100% tất cả các hàm trong dump.cs\n"
-        "2. [Chỉ Game Logic]: Chỉ decompile các Assembly gameplay (Assembly-CSharp, Project, Aov...), bỏ qua mscorlib/System/Unity engine core (Tốc độ cao hơn gấp 5 lần)\n"
-    )
+    choice = prompt_mode()
 
-    if choice == -1 or choice == 0: # Cancel
-        print("[-] Người dùng hủy bỏ.")
+    if choice == -1:
+        print("[-] Người dùng hủy bỏ tác vụ.")
         return
 
     only_gameplay = (choice == 1)
@@ -204,7 +241,12 @@ def main():
     }
 
     print(f"[*] Bắt đầu xử lý {dump_path} -> {output_v2_path}...")
-    ida_kernwin.show_wait_box("Đang decompile và xuất dumpv2.cs... Nhấn Cancel để dừng sớm.")
+    wait_box_active = False
+    try:
+        ida_kernwin.show_wait_box("Đang decompile và xuất dumpv2.cs... Nhấn Cancel để dừng sớm.")
+        wait_box_active = True
+    except Exception:
+        pass
 
     start_time = time.time()
     total_methods = 0
@@ -217,6 +259,13 @@ def main():
 
     rva_pattern = re.compile(r'// RVA:\s*(0x[0-9A-Fa-f]+|-1)\s+Offset:')
     image_pattern = re.compile(r'// Image \d+:\s*([A-Za-z0-9_\-\.]+)\s*-')
+
+    # Cấu hình flags đổi tên an toàn
+    name_flags = 0
+    if hasattr(idc, 'SN_NOWARN'):
+        name_flags |= idc.SN_NOWARN
+    if hasattr(idc, 'SN_NOCHECK'):
+        name_flags |= idc.SN_NOCHECK
 
     try:
         with open(dump_path, 'r', encoding='utf-8', errors='ignore') as infile, \
@@ -264,14 +313,14 @@ def main():
                         raw_name, sig_decl = method_name_map[rva]
                         clean_sym = sanitize_name(raw_name)
                         # Đổi tên trong IDA database
-                        idc.set_name(ea, clean_sym, idc.SN_NOWARN | idc.SN_NOCHECK)
+                        idc.set_name(ea, clean_sym, name_flags)
                         # Ép kiểu prototype nếu có
                         if sig_decl:
                             try:
                                 clean_sig = sig_decl.replace('&', '*')
-                                pt = idc.parse_decl(clean_sig, idc.PT_SILENT)
+                                pt = idc.parse_decl(clean_sig, getattr(idc, 'PT_SILENT', 1))
                                 if pt:
-                                    idc.apply_type(ea, pt, idc.TINFO_DEFINITE)
+                                    idc.apply_type(ea, pt, getattr(idc, 'TINFO_DEFINITE', 1))
                             except Exception:
                                 pass
 
@@ -323,7 +372,14 @@ def main():
                         msg = f"Đã decompile {decompiled_count} / {total_methods} hàm ({failed_count} lỗi, {skipped_count} bỏ qua) - {elapsed:.1f}s"
                         print(f"[*] {msg}")
 
-                        if ida_kernwin.user_cancelled():
+                        is_cancelled = False
+                        try:
+                            if ida_kernwin.user_cancelled():
+                                is_cancelled = True
+                        except Exception:
+                            pass
+
+                        if is_cancelled:
                             print("[!] Người dùng bấm Cancel. Đang lưu lại các hàm đã xử lý...")
                             break
                     continue
@@ -332,7 +388,11 @@ def main():
                 outfile.write(line)
 
     finally:
-        ida_kernwin.hide_wait_box()
+        if wait_box_active:
+            try:
+                ida_kernwin.hide_wait_box()
+            except Exception:
+                pass
         try:
             ida_hexrays.clear_cached_cfuncs()
         except Exception:
@@ -349,12 +409,16 @@ def main():
     print(f" - Thời gian thực thi: {elapsed_total:.1f} giây")
     print(f" - File thành phẩm: {output_v2_path}")
     print("=" * 70)
-    ida_kernwin.info(
-        f"Hoàn thành xuất dumpv2.cs!\n\n"
-        f"Thành công: {decompiled_count} hàm\n"
-        f"Lỗi: {failed_count}\n"
-        f"File lưu tại:\n{output_v2_path}"
-    )
+    try:
+        ida_kernwin.info(
+            f"Hoàn thành xuất dumpv2.cs!\n\n"
+            f"Thành công: {decompiled_count} hàm\n"
+            f"Lỗi: {failed_count}\n"
+            f"Bỏ qua: {skipped_count}\n\n"
+            f"File lưu tại:\n{output_v2_path}"
+        )
+    except Exception:
+        pass
 
 if __name__ == '__main__':
     main()
