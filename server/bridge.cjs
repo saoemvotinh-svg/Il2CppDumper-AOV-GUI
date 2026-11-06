@@ -344,12 +344,18 @@ function createBridgeApp() {
         }
       }
 
+      const hasDumpV2 = fs.existsSync(path.join(targetDir, 'dumpv2.cs'));
+      const dumpV2Stat = hasDumpV2 ? fs.statSync(path.join(targetDir, 'dumpv2.cs')) : null;
+
       res.json({
         exists: true,
         directory: targetDir,
         artifacts,
         dummyDlls,
-        totalDlls: dummyDlls.length
+        totalDlls: dummyDlls.length,
+        hasDumpV2,
+        dumpV2Size: dumpV2Stat ? dumpV2Stat.size : 0,
+        defaultSource: hasDumpV2 ? 'dumpv2.cs' : 'dump.cs'
       });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -357,7 +363,30 @@ function createBridgeApp() {
   });
 
   // --- DUMP.CS AST & SYMBOL ENGINE ---
-  let dumpRegistryCache = null;
+  const dumpRegistryMap = new Map();
+
+  function beautifyCSharp(cCode) {
+    if (!cCode) return '';
+    let c = cCode;
+    // 1. Struct member access: this->fields.x -> this.x
+    c = c.replace(/([A-Za-z0-9_]+)->fields\.([A-Za-z0-9_]+)/g, '$1.$2');
+    // 2. Generic pointer access: obj->x -> obj.x
+    c = c.replace(/([A-Za-z0-9_]+)->([A-Za-z0-9_]+)/g, '$1.$2');
+    // 3. Pointer types in variable declarations
+    c = c.replace(/([A-Za-z0-9_]+_)?([A-Za-z0-9_]+)_o\s*\*\s*([A-Za-z0-9_]+);/g, '$2 $3;');
+    // 4. Namespace_Class_o* cast: (Assets_Scripts_UI_HeroView_o *) -> (HeroView)
+    c = c.replace(/\([A-Za-z0-9_]+_([A-Za-z0-9_]+)_o\s*\*\)/g, '($1)');
+    c = c.replace(/\(([A-Za-z0-9_]+)_o\s*\*\)/g, '($1)');
+    // 5. Clean keywords: nullptr -> null, 0LL -> 0
+    c = c.replace(/\bnullptr\b/g, 'null');
+    c = c.replace(/\b0LL\b/g, '0');
+    c = c.replace(/\b1LL\b/g, '1');
+    // 6. Function pointer calls
+    c = c.replace(/\(\([A-Za-z0-9_\*\s]+?\(__fastcall\s*\*?\)\(.*?\)\)([A-Za-z0-9_]+)\)/g, '$1');
+    // 7. Unwrap inlined string literals: StringLiteral_123 /* "Text" */ -> "Text"
+    c = c.replace(/StringLiteral_\d+\s*\/\*\s*("(?:[^"\\]|\\.)*")\s*\*\//g, '$1');
+    return c;
+  }
 
   function splitParameters(raw) {
     if (!raw || !raw.trim()) return [];
@@ -394,8 +423,9 @@ function createBridgeApp() {
   async function getOrBuildDumpRegistry(dumpPath) {
     if (!fs.existsSync(dumpPath)) return null;
     const stat = fs.statSync(dumpPath);
-    if (dumpRegistryCache && dumpRegistryCache.dumpPath === dumpPath && dumpRegistryCache.mtime === stat.mtimeMs) {
-      return dumpRegistryCache;
+    const cached = dumpRegistryMap.get(dumpPath);
+    if (cached && cached.mtime === stat.mtimeMs) {
+      return cached;
     }
 
     const stream = fs.createReadStream(dumpPath, { encoding: 'utf8' });
@@ -485,7 +515,7 @@ function createBridgeApp() {
       }
     }
 
-    dumpRegistryCache = {
+    const registryObj = {
       dumpPath,
       mtime: stat.mtimeMs,
       images,
@@ -495,7 +525,8 @@ function createBridgeApp() {
       childrenByBase,
       dllMap
     };
-    return dumpRegistryCache;
+    dumpRegistryMap.set(dumpPath, registryObj);
+    return registryObj;
   }
 
   async function parseClassDetails(dumpPath, registry, typeDefIndex, targetName) {
@@ -517,16 +548,26 @@ function createBridgeApp() {
 
     const lines = [];
     let foundStart = false;
+    let depth = 0;
+    let hasOpenedClassBrace = false;
 
     for await (const l of rl) {
       if (!foundStart) {
         if (l.includes(`TypeDefIndex: ${targetClass.typeDefIndex}`)) {
           foundStart = true;
           lines.push(l);
+          for (const ch of l) {
+            if (ch === '{') { depth++; hasOpenedClassBrace = true; }
+            else if (ch === '}') depth--;
+          }
         }
       } else {
         lines.push(l);
-        if (lines.length > 3 && l.trim() === '}') {
+        for (const ch of l) {
+          if (ch === '{') { depth++; hasOpenedClassBrace = true; }
+          else if (ch === '}') depth--;
+        }
+        if (hasOpenedClassBrace && depth <= 0) {
           break;
         }
       }
@@ -538,16 +579,20 @@ function createBridgeApp() {
     const properties = [];
     let currentSection = '';
     let lastRva = null;
+    let lineIdx = 0;
 
-    for (const l of lines) {
+    while (lineIdx < lines.length) {
+      const l = lines[lineIdx];
       const trimmed = l.trim();
-      if (trimmed === '// Fields') { currentSection = 'fields'; continue; }
-      if (trimmed === '// Methods') { currentSection = 'methods'; continue; }
-      if (trimmed === '// Properties') { currentSection = 'properties'; continue; }
+
+      if (trimmed === '// Fields') { currentSection = 'fields'; lineIdx++; continue; }
+      if (trimmed === '// Methods') { currentSection = 'methods'; lineIdx++; continue; }
+      if (trimmed === '// Properties') { currentSection = 'properties'; lineIdx++; continue; }
 
       if (trimmed.startsWith('// RVA:')) {
-        const m = trimmed.match(/RVA:\s*0x([0-9A-Fa-f]+)\s+Offset:\s*0x([0-9A-Fa-f]+)\s+VA:\s*0x([0-9A-Fa-f]+)(?:\s+Slot:\s*(\d+))?/);
-        if (m) lastRva = { rva: '0x' + m[1], offset: '0x' + m[2], va: '0x' + m[3], slot: m[4] || null };
+        const m = trimmed.match(/RVA:\s*(0x[0-9A-Fa-f]+|-1)\s+Offset:\s*(0x[0-9A-Fa-f]+|-1)\s+VA:\s*(0x[0-9A-Fa-f]+|-1)(?:\s+Slot:\s*(\d+))?/);
+        if (m) lastRva = { rva: m[1], offset: m[2], va: m[3], slot: m[4] || null };
+        lineIdx++;
         continue;
       }
 
@@ -563,37 +608,79 @@ function createBridgeApp() {
             raw: trimmed
           });
         }
+        lineIdx++;
         continue;
       }
 
-      if (currentSection === 'methods' && ((trimmed.includes('(') && trimmed.includes('{')) || trimmed.includes(');'))) {
+      if (currentSection === 'methods' && trimmed.includes('(')) {
         const methodMatch = trimmed.match(/(public|protected|private|internal)?\s*(virtual|override|abstract|static)?\s*([A-Za-z0-9_<>`\[\],\s]+?)\s+([A-Za-z0-9_<>`\.]+)\((.*?)\)/);
         if (methodMatch) {
           const rawParams = methodMatch[5].trim();
           const params = splitParameters(rawParams);
+          const methodName = methodMatch[4].trim();
+
+          let methodBody = '{ }';
+          let isDecompiled = false;
+
+          if (trimmed.includes('{ }')) {
+            methodBody = '{ }';
+            isDecompiled = false;
+          } else if (trimmed.includes('{') && trimmed.includes('}')) {
+            methodBody = trimmed.slice(trimmed.indexOf('{'));
+            isDecompiled = false;
+          } else {
+            const bodyLines = [];
+            let mDepth = 0;
+            let j = lineIdx + 1;
+            while (j < lines.length) {
+              const bl = lines[j];
+              bodyLines.push(bl);
+              for (const ch of bl) {
+                if (ch === '{') mDepth++;
+                else if (ch === '}') mDepth--;
+              }
+              if (mDepth <= 0 && bl.includes('}')) {
+                break;
+              }
+              j++;
+            }
+            if (bodyLines.length > 0) {
+              methodBody = bodyLines.join('\n');
+              isDecompiled = methodBody.includes('// [Hex-Rays Decompiled Logic]');
+              lineIdx = j;
+            }
+          }
+
           methods.push({
             access: methodMatch[1] || 'private',
             modifier: methodMatch[2] || '',
             returnType: methodMatch[3].trim(),
-            name: methodMatch[4].trim(),
+            name: methodName,
             parameters: params,
             paramCount: params.length,
             rva: lastRva?.rva || null,
             offset: lastRva?.offset || null,
             slot: lastRva?.slot || null,
-            raw: trimmed
+            raw: trimmed,
+            body: methodBody,
+            cleanBody: beautifyCSharp(methodBody),
+            isDecompiled
           });
+          lastRva = null;
         }
-        lastRva = null;
+        lineIdx++;
         continue;
       }
 
       if (currentSection === 'properties' && (trimmed.includes('{ get') || trimmed.includes('{ set'))) {
         properties.push({ raw: trimmed });
       }
+
+      lineIdx++;
     }
 
     const childClasses = registry.childrenByBase.get(targetClass.name) || [];
+    const decompiledMethodCount = methods.filter(m => m.isDecompiled).length;
 
     return {
       meta: {
@@ -604,11 +691,16 @@ function createBridgeApp() {
       fields,
       methods,
       properties,
-      sourceCode: lines.join('\n')
+      sourceCode: lines.join('\n'),
+      cleanSourceCode: beautifyCSharp(lines.join('\n')),
+      isDecompiledClass: decompiledMethodCount > 0,
+      decompiledMethodCount,
+      totalMethods: methods.length,
+      sourceFile: path.basename(dumpPath)
     };
   }
 
-  async function searchDumpSymbols(dumpPath, registry, query, symbolTypeFilter = 'all', limit = 40) {
+  async function searchDumpSymbols(dumpPath, registry, query, symbolTypeFilter = 'all', limit = 40, searchBody = false) {
     const readline = require('readline');
     const rl = readline.createInterface({ input: fs.createReadStream(dumpPath, { encoding: 'utf8' }) });
     const qLower = query.toLowerCase();
@@ -761,15 +853,18 @@ function createBridgeApp() {
       return res.json({ results: [], totalFound: 0 });
     }
 
-    const dumpPath = path.join(dir, 'dump.cs');
-    if (!fs.existsSync(dumpPath)) {
-      return res.status(404).json({ error: 'dump.cs not found in target directory' });
+    const { source, searchBody } = req.query;
+    const sourceName = source || (fs.existsSync(path.join(dir, 'dumpv2.cs')) ? 'dumpv2.cs' : 'dump.cs');
+    const dumpPath = path.join(dir, sourceName);
+    const safeDumpPath = fs.existsSync(dumpPath) ? dumpPath : path.join(dir, 'dump.cs');
+    if (!fs.existsSync(safeDumpPath)) {
+      return res.status(404).json({ error: `${sourceName} not found in target directory` });
     }
 
     try {
       const t0 = Date.now();
-      const registry = await getOrBuildDumpRegistry(dumpPath);
-      const results = await searchDumpSymbols(dumpPath, registry, query, type, parseInt(limit, 10));
+      const registry = await getOrBuildDumpRegistry(safeDumpPath);
+      const results = await searchDumpSymbols(safeDumpPath, registry, query, type, parseInt(limit, 10), searchBody === 'true');
       res.json({
         results,
         totalFound: results.length,
@@ -823,20 +918,47 @@ function createBridgeApp() {
     const ws = resolveWorkspaceDefaults();
     const { typeDefIndex, name, dir = ws.outputDir } = req.query;
 
-    const dumpPath = path.join(dir, 'dump.cs');
-    if (!fs.existsSync(dumpPath)) {
-      return res.status(404).json({ error: 'dump.cs not found' });
+    const { source } = req.query;
+    const sourceName = source || (fs.existsSync(path.join(dir, 'dumpv2.cs')) ? 'dumpv2.cs' : 'dump.cs');
+    const dumpPath = path.join(dir, sourceName);
+    const safeDumpPath = fs.existsSync(dumpPath) ? dumpPath : path.join(dir, 'dump.cs');
+    if (!fs.existsSync(safeDumpPath)) {
+      return res.status(404).json({ error: `${sourceName} not found` });
     }
 
     try {
-      const registry = await getOrBuildDumpRegistry(dumpPath);
-      const details = await parseClassDetails(dumpPath, registry, typeDefIndex, name);
+      const registry = await getOrBuildDumpRegistry(safeDumpPath);
+      const details = await parseClassDetails(safeDumpPath, registry, typeDefIndex, name);
       if (!details) {
         return res.status(404).json({ error: 'Class not found' });
       }
       res.json(details);
     } catch (err) {
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Export single class as downloadable .cs file
+  app.get('/api/export-class-cs', async (req, res) => {
+    const ws = resolveWorkspaceDefaults();
+    const { typeDefIndex, name, dir = ws.outputDir, source, beautify = 'false' } = req.query;
+    const sourceName = source || (fs.existsSync(path.join(dir, 'dumpv2.cs')) ? 'dumpv2.cs' : 'dump.cs');
+    const dumpPath = path.join(dir, sourceName);
+    const safeDumpPath = fs.existsSync(dumpPath) ? dumpPath : path.join(dir, 'dump.cs');
+    if (!fs.existsSync(safeDumpPath)) return res.status(404).send('Dump file not found');
+
+    try {
+      const registry = await getOrBuildDumpRegistry(safeDumpPath);
+      const details = await parseClassDetails(safeDumpPath, registry, typeDefIndex, name);
+      if (!details) return res.status(404).send('Class not found');
+
+      let code = (beautify === 'true') ? details.cleanSourceCode : details.sourceCode;
+      const fileName = `${details.meta?.name || 'Class'}.cs`;
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      res.send(code);
+    } catch (err) {
+      res.status(500).send(err.message);
     }
   });
 

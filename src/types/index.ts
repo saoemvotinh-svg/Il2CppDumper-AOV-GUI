@@ -53,6 +53,9 @@ export interface ArtifactData {
   artifacts: FileArtifact[];
   dummyDlls: FileArtifact[];
   totalDlls: number;
+  hasDumpV2?: boolean;
+  dumpV2Size?: number;
+  defaultSource?: 'dumpv2.cs' | 'dump.cs';
 }
 
 export interface SearchResult {
@@ -68,7 +71,8 @@ export interface MethodParam {
 }
 
 export interface SymbolItem {
-  symbolType: 'method' | 'field' | 'class';
+  symbolType: 'method' | 'field' | 'class' | 'method-body';
+  bodySnippet?: string;
   name: string;
   kind?: string;
   signature: string;
@@ -114,6 +118,9 @@ export interface ClassMethod {
   offset?: string | null;
   slot?: string | null;
   raw: string;
+  body?: string;
+  cleanBody?: string;
+  isDecompiled?: boolean;
 }
 
 export interface ClassDetail {
@@ -136,6 +143,11 @@ export interface ClassDetail {
   methods: ClassMethod[];
   properties: { raw: string }[];
   sourceCode: string;
+  cleanSourceCode?: string;
+  isDecompiledClass?: boolean;
+  decompiledMethodCount?: number;
+  totalMethods?: number;
+  sourceFile?: string;
 }
 
 export interface DllClassSummary {

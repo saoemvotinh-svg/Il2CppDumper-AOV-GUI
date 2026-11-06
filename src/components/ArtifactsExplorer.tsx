@@ -18,6 +18,9 @@ import {
   Sparkles
 } from 'lucide-react';
 import type { ArtifactData, SymbolItem, ClassDetail, DllClassSummary } from '../types';
+import { CodeViewer } from './CodeViewer';
+import { MethodAccordion } from './MethodAccordion';
+import { Download } from 'lucide-react';
 import { formatBytes } from '../lib/utils';
 
 interface ArtifactsExplorerProps {
@@ -31,9 +34,21 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
   onRefresh,
   onOpenFolder,
 }) => {
+  // --- Source Selection (dumpv2.cs vs dump.cs) ---
+  const [activeSource, setActiveSource] = useState<'dumpv2.cs' | 'dump.cs'>('dump.cs');
+
+  // Sync default source when artifacts data arrives
+  React.useEffect(() => {
+    if (artifacts?.hasDumpV2) {
+      setActiveSource('dumpv2.cs');
+    } else {
+      setActiveSource('dump.cs');
+    }
+  }, [artifacts?.hasDumpV2]);
+
   // --- Symbol Search State ---
   const [searchQuery, setSearchQuery] = useState('');
-  const [symbolTypeFilter, setSymbolTypeFilter] = useState<'all' | 'method' | 'field' | 'class'>('all');
+  const [symbolTypeFilter, setSymbolTypeFilter] = useState<'all' | 'method' | 'field' | 'class' | 'body'>('all');
   const [symbolResults, setSymbolResults] = useState<SymbolItem[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [tookMs, setTookMs] = useState<number | null>(null);
@@ -61,7 +76,7 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
   };
 
   // Perform Deep Symbol Search
-  const handleSearch = async (e?: React.FormEvent, overrideType?: 'all' | 'method' | 'field' | 'class') => {
+  const handleSearch = async (e?: React.FormEvent, overrideType?: 'all' | 'method' | 'field' | 'class' | 'body') => {
     if (e) e.preventDefault();
     if (!searchQuery.trim() || searchQuery.length < 2) return;
 
@@ -70,7 +85,7 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
     try {
       const res = await fetch(
         apiUrl(
-          `/api/search-dump?query=${encodeURIComponent(searchQuery)}&type=${filterType}&limit=50&dir=${encodeURIComponent(
+          `/api/search-dump?query=${encodeURIComponent(searchQuery)}&type=${filterType}&limit=50&source=${activeSource}${filterType === 'body' ? '&searchBody=true' : ''}&dir=${encodeURIComponent(
             artifacts?.directory || ''
           )}`
         )
@@ -92,7 +107,7 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
     setDllClassFilter('');
     try {
       const res = await fetch(
-        apiUrl(`/api/dll-classes?dll=${encodeURIComponent(dllName)}&dir=${encodeURIComponent(artifacts?.directory || '')}`)
+        apiUrl(`/api/dll-classes?dll=${encodeURIComponent(dllName)}&source=${activeSource}&dir=${encodeURIComponent(artifacts?.directory || '')}`)
       );
       const data = await res.json();
       setDllClasses(data.classes || []);
@@ -117,7 +132,7 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
     try {
       const queryParam = typeDefIndex !== undefined ? `typeDefIndex=${typeDefIndex}` : `name=${encodeURIComponent(name || '')}`;
       const res = await fetch(
-        apiUrl(`/api/class-details?${queryParam}&dir=${encodeURIComponent(artifacts?.directory || '')}`)
+        apiUrl(`/api/class-details?${queryParam}&source=${activeSource}&dir=${encodeURIComponent(artifacts?.directory || '')}`)
       );
       const data = await res.json();
       setSelectedClass(data);
@@ -235,6 +250,65 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
         </div>
       </section>
 
+      {/* Dual Source Switcher & Decompiled Engine Status */}
+      <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg border border-app-border bg-app-elevated/40">
+        <div className="flex items-center gap-2.5">
+          <span className="text-xs font-semibold uppercase tracking-wider text-ink-muted">Active Engine:</span>
+          <div className="flex items-center rounded border border-app-border bg-app-workspace p-0.5">
+            <button
+              type="button"
+              onClick={() => setActiveSource('dumpv2.cs')}
+              disabled={!artifacts?.hasDumpV2}
+              className={`px-3 py-1 rounded text-xs font-mono font-medium transition-all flex items-center gap-1.5 ${
+                activeSource === 'dumpv2.cs'
+                  ? 'bg-accent text-white shadow-sm font-semibold'
+                  : artifacts?.hasDumpV2
+                  ? 'text-ink-secondary hover:text-ink-primary cursor-pointer'
+                  : 'text-ink-muted/40 cursor-not-allowed opacity-50'
+              }`}
+              title={artifacts?.hasDumpV2 ? "Sử dụng dumpv2.cs (Có toàn bộ thân hàm Hex-Rays)" : "Chưa có dumpv2.cs. Chạy script ida_export_dumpv2.py để tạo!"}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>dumpv2.cs (Hex-Rays)</span>
+              {artifacts?.hasDumpV2 && (
+                <span className="px-1.5 py-0.2 rounded text-[10px] bg-white/20 text-white font-bold uppercase">Active</span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveSource('dump.cs')}
+              className={`px-3 py-1 rounded text-xs font-mono font-medium transition-all flex items-center gap-1.5 cursor-pointer ${
+                activeSource === 'dump.cs'
+                  ? 'bg-app-elevated text-ink-primary font-semibold'
+                  : 'text-ink-secondary hover:text-ink-primary'
+              }`}
+              title="Sử dụng dump.cs tiêu chuẩn (Chữ ký rỗng)"
+            >
+              <FileCode2 className="w-3.5 h-3.5" />
+              <span>dump.cs (Standard)</span>
+            </button>
+          </div>
+        </div>
+
+        {artifacts?.hasDumpV2 ? (
+          <div className="flex items-center gap-2.5 text-xs font-mono">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-semibold shadow-sm">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>Hex-Rays Decompiled Active</span>
+            </span>
+            <span className="text-ink-muted text-[11px] hidden sm:inline">
+              ({formatBytes(artifacts.dumpV2Size || 0)})
+            </span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5 text-xs text-ink-secondary">
+            <span>💡 Muốn xem thân hàm logic? Chạy</span>
+            <code className="text-accent bg-app-workspace px-1.5 py-0.5 rounded border border-app-border font-mono text-[11px]">ida_export_dumpv2.py</code>
+            <span>trong IDA Pro!</span>
+          </div>
+        )}
+      </div>
+
       {/* Deep Symbol Search In dump.cs */}
       <section className="panel-frame">
         <div className="panel-header flex items-center justify-between">
@@ -264,7 +338,7 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
 
             {/* Type Filter Tabs */}
             <div className="flex items-center gap-1 bg-app-elevated p-0.5 rounded border border-app-border">
-              {(['all', 'method', 'field', 'class'] as const).map((t) => (
+              {(['all', 'method', 'field', 'class', 'body'] as const).map((t) => (
                 <button
                   key={t}
                   type="button"
@@ -278,7 +352,7 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
                       : 'text-ink-secondary hover:text-ink-primary'
                   }`}
                 >
-                  {t === 'all' ? 'All' : t + 's'}
+                  {t === 'all' ? 'All' : t === 'body' ? '⚡ Ruột hàm' : t + 's'}
                 </button>
               ))}
             </div>
@@ -314,10 +388,12 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
                             ? 'bg-accent/20 text-accent border border-accent/40'
                             : item.symbolType === 'field'
                             ? 'bg-status-ready/20 text-status-ready border border-status-ready/40'
+                            : item.symbolType === 'method-body'
+                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
                             : 'bg-app-elevated text-ink-primary border border-app-border'
                         }`}
                       >
-                        {item.symbolType}
+                        {item.symbolType === 'method-body' ? '⚡ Thân Hàm' : item.symbolType}
                       </span>
 
                       {/* Symbol Name & Copy */}
@@ -875,6 +951,21 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
                         </div>
 
                         <div className="flex items-center gap-2">
+                          {selectedClass.isDecompiledClass && (
+                            <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/15 border border-emerald-500/30 text-emerald-400">
+                              <Sparkles className="w-3 h-3" />
+                              <span>Hex-Rays: {selectedClass.decompiledMethodCount} / {selectedClass.totalMethods} methods</span>
+                            </span>
+                          )}
+                          <a
+                            href={apiUrl(`/api/export-class-cs?typeDefIndex=${selectedClass.meta.typeDefIndex}&source=${activeSource}&beautify=true&dir=${encodeURIComponent(artifacts?.directory || '')}`)}
+                            download={`${selectedClass.meta.name}.cs`}
+                            className="btn-secondary-action px-2.5 py-1 text-xs flex items-center gap-1.5 cursor-pointer font-mono text-accent hover:border-accent"
+                            title="Tải riêng class này thành file .cs hoàn chỉnh"
+                          >
+                            <Download className="w-3 h-3" />
+                            <span>Export .cs</span>
+                          </a>
                           <button
                             onClick={() => copyToClipboard(selectedClass.sourceCode)}
                             className="btn-secondary-action px-2.5 py-1 text-xs flex items-center gap-1.5 cursor-pointer font-mono"
@@ -884,7 +975,7 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
                             ) : (
                               <Copy className="w-3 h-3" />
                             )}
-                            <span>Copy Class Code</span>
+                            <span>Copy Code</span>
                           </button>
                         </div>
                       </div>
@@ -990,89 +1081,17 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
                           {selectedClass.methods
                             .filter((m) =>
                               m.name.toLowerCase().includes(classMemberFilter.toLowerCase()) ||
-                              m.returnType.toLowerCase().includes(classMemberFilter.toLowerCase())
+                              m.returnType.toLowerCase().includes(classMemberFilter.toLowerCase()) ||
+                              (m.body && m.body.toLowerCase().includes(classMemberFilter.toLowerCase()))
                             )
                             .map((method, i) => (
-                              <div
+                              <MethodAccordion
                                 key={i}
-                                className="p-2.5 rounded border border-app-border bg-app-elevated/40 hover:bg-app-elevated flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2"
-                              >
-                                <div className="space-y-1 flex-1 min-w-0">
-                                  <div className="flex flex-wrap items-center gap-1.5">
-                                    <span className="text-[10px] text-ink-muted uppercase">{method.access}</span>
-                                    {method.modifier && (
-                                      <span className="text-[10px] text-accent uppercase">{method.modifier}</span>
-                                    )}
-                                    <span className="text-status-ready font-medium select-text">{method.returnType}</span>
-                                    <span className="font-semibold text-ink-primary select-text">{method.name}</span>
-                                    <button
-                                      onClick={() => copyToClipboard(method.name)}
-                                      className="p-0.5 text-ink-muted hover:text-ink-primary cursor-pointer"
-                                      title="Copy method name"
-                                    >
-                                      <Copy className="w-2.5 h-2.5" />
-                                    </button>
-                                    <span className="text-ink-secondary select-text">
-                                      ({method.parameters.map((p) => `${p.type} ${p.name}`).join(', ')})
-                                    </span>
-                                  </div>
-                                  <div className="text-[11px] text-ink-muted flex items-center gap-3">
-                                    <div className="flex items-center gap-1">
-                                      <span>Parameters ({method.paramCount}):</span>
-                                      {method.paramCount > 0 && (
-                                        <button
-                                          onClick={() => copyToClipboard(method.parameters.map((p) => `${p.type} ${p.name}`).join(', '))}
-                                          className="text-ink-secondary hover:text-ink-primary flex items-center gap-0.5 cursor-pointer"
-                                          title="Copy parameters list"
-                                        >
-                                          <span>copy</span>
-                                          <Copy className="w-2.5 h-2.5" />
-                                        </button>
-                                      )}
-                                    </div>
-                                    {method.slot && <span>Slot: {method.slot}</span>}
-                                    <button
-                                      onClick={() => copyToClipboard(method.raw)}
-                                      className="text-ink-secondary hover:text-accent flex items-center gap-1 cursor-pointer"
-                                      title="Copy full method signature"
-                                    >
-                                      <span>Copy Signature</span>
-                                      <Copy className="w-2.5 h-2.5" />
-                                    </button>
-                                  </div>
-                                </div>
-
-                                <div className="flex items-center gap-2 shrink-0">
-                                  {method.rva && (
-                                    <button
-                                      onClick={() => copyToClipboard(method.rva!)}
-                                      className="px-2 py-0.5 rounded text-[11px] bg-app-bg hover:bg-app-elevatedHover border border-app-border text-ink-secondary hover:text-accent cursor-pointer flex items-center gap-1"
-                                      title="Copy RVA"
-                                    >
-                                      {copiedText === method.rva ? (
-                                        <Check className="w-3 h-3 text-status-ready" />
-                                      ) : (
-                                        <Copy className="w-3 h-3" />
-                                      )}
-                                      <span className="select-text">RVA: {method.rva}</span>
-                                    </button>
-                                  )}
-                                  {method.offset && (
-                                    <button
-                                      onClick={() => copyToClipboard(method.offset!)}
-                                      className="px-2 py-0.5 rounded text-[11px] bg-app-bg hover:bg-app-elevatedHover border border-app-border text-ink-secondary hover:text-accent cursor-pointer flex items-center gap-1"
-                                      title="Copy File Offset"
-                                    >
-                                      {copiedText === method.offset ? (
-                                        <Check className="w-3 h-3 text-status-ready" />
-                                      ) : (
-                                        <Copy className="w-3 h-3" />
-                                      )}
-                                      <span className="select-text">Offset: {method.offset}</span>
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
+                                method={method}
+                                copiedText={copiedText}
+                                onCopy={copyToClipboard}
+                                onSymbolClick={(sym) => handleInspectClass(undefined, sym)}
+                              />
                             ))}
                         </div>
                       )}
@@ -1133,8 +1152,17 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
 
                       {/* DECOMPILED CODE TAB */}
                       {activeClassTab === 'code' && (
-                        <div className="rounded border border-app-border bg-app-bg p-3 overflow-x-auto font-mono text-xs leading-relaxed text-ink-primary select-text">
-                          <pre className="select-text whitespace-pre">{selectedClass.sourceCode}</pre>
+                        <div className="h-full min-h-[450px]">
+                          <CodeViewer
+                            code={selectedClass.sourceCode}
+                            cleanCode={selectedClass.cleanSourceCode}
+                            fileName={`${selectedClass.meta.name}.cs`}
+                            isDecompiled={selectedClass.isDecompiledClass}
+                            onSymbolClick={(sym) => handleInspectClass(undefined, sym)}
+                            onDownloadCs={() => {
+                              window.open(apiUrl(`/api/export-class-cs?typeDefIndex=${selectedClass.meta.typeDefIndex}&source=${activeSource}&beautify=true&dir=${encodeURIComponent(artifacts?.directory || '')}`));
+                            }}
+                          />
                         </div>
                       )}
                     </div>
