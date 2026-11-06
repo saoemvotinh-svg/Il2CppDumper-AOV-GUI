@@ -30,7 +30,7 @@ export const Header: React.FC<HeaderProps> = ({
               IL2CPPDUMPER WORKSTATION PRO
             </span>
             <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[#1F2326] text-[#9FA6A2] border border-[#2C3236]">
-              v6.8.2
+              v6.8.3
             </span>
             <div className="hidden lg:flex items-center gap-1.5 text-[10px] font-mono text-[#676E6A]">
               <span>[ARM64-v8a</span>
