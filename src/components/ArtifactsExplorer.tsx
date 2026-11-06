@@ -1299,7 +1299,7 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
           </div>
 
           {/* Script Cards Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
             {[
               {
                 fileName: 'ida_ultimate_il2cpp.py',
@@ -1307,6 +1307,7 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
                 desc: 'Premier Decompiler: Fault-tolerant header chunker, inline string Xrefs in Hex-Rays F5, auto-cast this to struct & strip MethodInfo params.',
                 tag: 'Python 3 / IDA 7.x-9.x',
                 badge: 'Supreme ⚡',
+                badgeStyle: 'bg-[#C49B66]/15 text-[#C49B66] border border-[#C49B66]/30',
                 isHot: true,
               },
               {
@@ -1315,6 +1316,7 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
                 desc: 'Automatically decompiles all functions in dump.cs via Hex-Rays, normalizes IDB names, and generates dumpv2.cs with full C# method bodies.',
                 tag: 'Python 3 / Hex-Rays F5',
                 badge: 'DumpV2 Engine ⚡',
+                badgeStyle: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30',
                 isHot: true,
               },
               {
@@ -1323,6 +1325,7 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
                 desc: 'Parses script.json & loads il2cpp.h into IDA Type Engine. Auto-renames methods, parameter types, structs, and string literals.',
                 tag: 'Python 3 / IDA 7.x-9.x',
                 badge: 'Recommended ⭐',
+                badgeStyle: 'bg-amber-500/15 text-amber-400 border border-amber-500/30',
                 isHot: false,
               },
               {
@@ -1331,6 +1334,7 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
                 desc: 'Quickly renames methods and strings from script.json without requiring C structs.',
                 tag: 'Python 3 / IDA 7.x-9.x',
                 badge: 'Standard',
+                badgeStyle: 'bg-[#1F2326] text-[#9FA6A2] border border-[#2C3236]',
                 isHot: false,
               },
               {
@@ -1339,6 +1343,7 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
                 desc: 'Imports struct definitions from il2cpp.h and maps symbols from script.json into Ghidra 10.x / 11.x.',
                 tag: 'Ghidra Script',
                 badge: 'Ghidra',
+                badgeStyle: 'bg-purple-500/15 text-purple-400 border border-purple-500/30',
                 isHot: false,
               },
             ].map((script) => {
@@ -1347,36 +1352,34 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
               return (
                 <div
                   key={script.fileName}
-                  className={`p-3 rounded border flex flex-col justify-between space-y-2.5 transition-colors ${
+                  className={`p-3.5 rounded border flex flex-col justify-between space-y-3 transition-colors overflow-hidden ${
                     script.isHot
-                      ? 'bg-accent/5 border-accent/40'
+                      ? 'bg-accent/5 border-accent/40 shadow-sm'
                       : 'bg-app-workspace border-app-border hover:border-app-border-hover'
                   }`}
                 >
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between gap-1.5">
-                      <div className="flex items-center gap-1.5">
-                        <Terminal className={`w-3.5 h-3.5 ${script.isHot ? 'text-accent' : 'text-ink-secondary'}`} />
-                        <span className="text-xs font-mono font-bold text-ink-primary">{script.fileName}</span>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                        <Terminal className={`w-3.5 h-3.5 shrink-0 ${script.isHot ? 'text-accent' : 'text-ink-secondary'}`} />
+                        <span className="text-xs font-mono font-bold text-ink-primary truncate" title={script.fileName}>
+                          {script.fileName}
+                        </span>
                       </div>
                       <span
-                        className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                          script.isHot
-                            ? 'bg-accent/20 text-accent font-semibold border border-accent/30'
-                            : 'bg-app-elevated text-ink-muted border border-app-border'
-                        }`}
+                        className={`text-[10px] font-mono px-2 py-0.5 rounded font-semibold whitespace-nowrap shrink-0 ${script.badgeStyle}`}
                       >
                         {script.badge}
                       </span>
                     </div>
 
-                    <p className="text-[11px] text-ink-secondary leading-relaxed">{script.desc}</p>
+                    <p className="text-[11px] text-ink-secondary leading-relaxed line-clamp-3">{script.desc}</p>
                     <div className="text-[10px] font-mono text-ink-muted">
                       {matched ? `Size: ${formatBytes(matched.size)}` : 'Ready in output folder'}
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 pt-1 border-t border-app-border/60">
+                  <div className="flex items-center gap-2 pt-2 border-t border-app-border/60">
                     <button
                       onClick={() => copyToClipboard(scriptPath)}
                       className="btn-secondary-action flex-1 py-1 text-xs flex items-center justify-center gap-1.5 cursor-pointer font-medium"
@@ -1396,16 +1399,16 @@ export const ArtifactsExplorer: React.FC<ArtifactsExplorerProps> = ({
                     </button>
                     <button
                       onClick={onOpenFolder}
-                      className="btn-secondary-action px-2 py-1 text-xs flex items-center gap-1 cursor-pointer font-medium"
+                      className="btn-secondary-action px-2.5 py-1 text-xs flex items-center gap-1 cursor-pointer font-medium"
                       title="Open enclosing folder"
                     >
-                      <FolderOpen className="w-3 h-3 text-accent" />
+                      <FolderOpen className="w-3.5 h-3.5 text-accent" />
                     </button>
                   </div>
                 </div>
               );
             })}
-          </div>
+                    </div>
         </div>
       </section>
 
